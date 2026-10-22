@@ -1,0 +1,12 @@
+.venv/
+models/
+__pycache__/
+*.egg-info/
+bench/
+.venv-bench/
+dist/
+.venv-qwen/
+plan/
+lab/
+.yomiyasu/
+uv.lock

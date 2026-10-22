@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>聞き取り校正</title>
+<style>
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --panel-2: #f0f2f5;
+  --fg: #1c1f24;
+  --fg-dim: #6b7280;
+  --fg-faint: #9aa1ab;
+  --line: #d9dde3;
+  --accent: #1f6feb;
+  --accent-soft: #dbe8ff;
+  --ok: #1a7f37;
+  --err: #c0392b;
+  --cur: #fff8e1;
+  --cur-line: #e0a800;
+  --qw: #7c8698;
+  --shadow: 0 1px 2px rgba(16,20,28,.08), 0 6px 20px rgba(16,20,28,.06);
+}
+html[data-theme="dark"] {
+  --bg: #14161a;
+  --panel: #1c1f24;
+  --panel-2: #23272e;
+  --fg: #e6e8eb;
+  --fg-dim: #9aa4b2;
+  --fg-faint: #6b7482;
+  --line: #313741;
+  --accent: #6aa8ff;
+  --accent-soft: #1e2b45;
+  --ok: #4ec27e;
+  --err: #ff7a6b;
+  --cur: #2a2415;
+  --cur-line: #c99a2e;
+  --qw: #78839a;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.3);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.55 -apple-system, "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+body::before {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(127,127,127,.05), transparent 40%);
+}
+
+/* ---------- header ---------- */
+.bar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+.bar h1 { font-size: 14px; font-weight: 700; margin: 0 6px 0 0; white-space: nowrap; }
+.bar h1 .muted { color: var(--fg-faint); font-weight: 400; margin-left: 6px; }
+.grp { display: flex; align-items: center; gap: 6px; }
+.grp > .lbl { color: var(--fg-dim); font-size: 12px; white-space: nowrap; }
+button, select, .btn {
+  font: inherit; font-size: 12px;
+  color: var(--fg);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+button:hover, .btn:hover { border-color: var(--accent); }
+button[aria-pressed="true"], button.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
+label.ck { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+input[type="range"] { accent-color: var(--accent); width: 78px; vertical-align: middle; }
+#pos { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--fg-dim); white-space: nowrap; }
+#save { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--fg-dim); white-space: nowrap; }
+#save.dirty { color: #8a6d00; border-color: #e3c46a; background: #fff6dd; }
+#save.saving { color: var(--accent); border-color: var(--accent); }
+#save.saved { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+#save.err { color: #fff; background: var(--err); border-color: var(--err); font-weight: 700; animation: shake .25s 3; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-3px)} 75%{transform:translateX(3px)} }
+
+/* ---------- progress ---------- */
+.seek { position: relative; height: 3px; background: var(--panel-2); }
+#seekfill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); }
+#seekzone { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* ---------- layout ---------- */
+main { display: flex; align-items: flex-start; gap: 14px; padding: 14px; }
+aside.terms {
+  position: sticky; top: 92px;
+  flex: 0 0 220px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; box-shadow: var(--shadow);
+}
+aside.terms h2 { font-size: 12px; margin: 0 0 2px; letter-spacing: .04em; }
+aside.terms p.note { margin: 0 0 8px; font-size: 11px; color: var(--fg-faint); line-height: 1.4; }
+aside.terms ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+aside.terms li { display: flex; gap: 4px; align-items: center; }
+aside.terms input {
+  flex: 1; min-width: 0; font: inherit; font-size: 13px;
+  color: var(--fg); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px;
+}
+aside.terms input:focus { outline: 2px solid var(--accent); outline-offset: -1px; background: var(--panel); }
+aside.terms .del { padding: 2px 5px; line-height: 1; color: var(--fg-faint); }
+
+section.rows { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* ---------- rows ---------- */
+.row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid transparent;
+  border-radius: 10px;
+  padding: 8px 10px 9px;
+  box-shadow: var(--shadow);
+  scroll-margin: 120px;
+}
+.row .stamp {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px; font-weight: 700;
+  color: var(--fg-dim);
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  user-select: none;
+}
+.row .stamp:hover { color: var(--accent); border-color: var(--accent); }
+.row .stamp .range { display: block; font-size: 10px; font-weight: 400; color: var(--fg-faint); }
+.row .body { min-width: 0; }
+textarea.txt {
+  display: block; width: 100%; min-height: 30px;
+  font: inherit; font-size: 15px; line-height: 1.5;
+  color: var(--fg); background: transparent;
+  border: 1px solid transparent; border-radius: 6px;
+  padding: 3px 6px; margin: 0;
+  resize: none; overflow: hidden;
+  box-sizing: border-box;
+}
+textarea.txt:hover { border-color: var(--line); }
+textarea.txt:focus { outline: none; background: var(--panel-2); border-color: var(--accent); }
+.row.cur { border-left-color: var(--cur-line); background: var(--cur); }
+.row.cur .stamp { color: var(--cur-line); }
+.row.flash { animation: flash .45s ease-out 1; }
+@keyframes flash { from { background: color-mix(in srgb, var(--accent) 30%, var(--panel)); } to { background: var(--cur); } }
+
+/* ---------- qw ---------- */
+.qw {
+  margin: 2px 0 0 6px;
+  padding: 1px 6px;
+  font-size: 12.5px; line-height: 1.45;
+  color: var(--qw);
+  border-left: 2px solid color-mix(in srgb, var(--qw) 35%, transparent);
+  cursor: pointer;
+  white-space: pre-wrap; word-break: break-word;
+}
+.qw:hover { color: var(--fg-dim); border-left-color: var(--qw); background: var(--panel-2); border-radius: 0 5px 5px 0; }
+.qw .tag { font-size: 10px; letter-spacing: .05em; opacity: .75; margin-right: 4px; }
+.qw.none { cursor: default; border-left-color: transparent; opacity: .45; }
+.qw.none:hover { background: none; color: var(--qw); }
+
+/* ---------- legend ---------- */
+.legend {
+  position: fixed; right: 10px; bottom: 10px; z-index: 30;
+  width: 268px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow);
+  font-size: 11px; line-height: 1.7; color: var(--fg-dim);
+  padding: 6px 9px;
+}
+.legend h2 { font-size: 10px; letter-spacing: .08em; margin: 0; color: var(--fg-faint); display: flex; justify-content: space-between; align-items: center; }
+.legend h2 button { font-size: 10px; padding: 0 5px; border-radius: 4px; }
+.legend.min dl { display: none; }
+.legend dl { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; margin: 4px 0 0; }
+.legend dt { font-weight: 700; color: var(--fg); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.legend dd { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- banners ---------- */
+.banner {
+  margin: 12px 14px 0; padding: 8px 12px;
+  border: 1px solid var(--err); border-radius: 8px;
+  background: color-mix(in srgb, var(--err) 12%, var(--panel));
+  color: var(--err); font-weight: 700; font-size: 13px;
+}
+.banner[hidden] { display: none; }
+.hint { color: var(--fg-faint); font-size: 12px; padding: 0 14px 14px; }
+audio { display: none; }
+@media (max-width: 720px) {
+  main { flex-direction: column; }
+  aside.terms { position: static; flex: 1 1 auto; width: 100%; }
+  .legend { width: auto; left: 10px; }
+}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <h1>聞き取り校正 <span class="muted" id="count"></span></h1>
+
+  <div class="grp">
+    <span class="lbl">速度</span>
+    <button id="r100" type="button" data-rate="1">1.0</button>
+    <button id="r85" type="button" data-rate="0.85">0.85</button>
+    <button id="r70" type="button" data-rate="0.7">0.7</button>
+  </div>
+
+  <label class="ck"><input type="checkbox" id="loop" checked>ループ</label>
+
+  <div class="grp">
+    <span class="lbl">余白</span>
+    <input type="range" id="pad" min="0" max="1" step="0.05" value="0.3">
+    <span class="lbl" id="padval">0.30s</span>
+  </div>
+
+  <div id="pos">--:-- / --:--</div>
+
+  <label class="ck" id="donewrap" title="front matter の status を書き換えます">
+    <input type="checkbox" id="done">校正済み
+  </label>
+
+  <span class="grp"><button id="savebtn" type="button">保存</button><span id="save">読み込み中</span></span>
+  <span class="grp" style="margin-left:auto"><button id="theme" type="button">配色</button></span>
+</div>
+<div class="seek"><div id="seekzone" hidden></div><div id="seekfill"></div></div>
+
+<div class="banner" id="errbar" hidden></div>
+<p class="hint" id="hint">行を選ぶと、その行の区間が自動で再生されます。本文をクリックして編集 → Enter で次の行へ。</p>
+
+<main>
+  <aside class="terms">
+    <h2>固有名詞</h2>
+    <p class="note">1 行 1 語。本文の認識を直すときに見ます。</p>
+    <ol id="terms"></ol>
+    <p style="margin:8px 0 0"><button id="addterm" type="button">＋ 語を追加</button></p>
+  </aside>
+  <section class="rows" id="rows"></section>
+</main>
+
+<audio id="player" preload="metadata" src="/audio"></audio>
+
+<aside class="legend" id="legend">
+  <h2>キー <button id="legendbtn" type="button">−</button></h2>
+  <dl>
+    <dt>Enter</dt><dd>確定して次行へ（再生）</dd>
+    <dt>Esc</dt><dd>再生 / 一時停止</dd>
+    <dt>Option+Space</dt><dd>今の行を頭から再生</dd>
+    <dt>Option+↓</dt><dd>次の行へ（再生）</dd>
+    <dt>Option+↑</dt><dd>前の行へ（再生）</dd>
+    <dt>Option+←</dt><dd>2 秒戻す</dd>
+    <dt>Option+S</dt><dd>0.7 倍で今の行を 1 回</dd>
+    <dt>Option+/</dt><dd>カーソル位置に 〔？〕</dd>
+    <dt>Shift+Enter</dt><dd>後ろに新しい行を追加</dd>
+    <dt>Option+Backspace</dt><dd>空の行を削除</dd>
+    <dt>Cmd+S</dt><dd>保存</dd>
+  </dl>
+</aside>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   純関数: シートの解析と直列化（DOM に触れない。node からrequireできる）
+   ===================================================================== */
+
+var BODY_RE = /^([ \t]*-[ \t]*)\[([^\]]*)\]([ \t]*)(.*)$/;
+var QW_RE = /^[ \t]*<!--[ \t]*qw:/;
+var H3_RE = /^#{1,6}[ \t]/;
+var TERM_RE = /^[ \t]*-[ \t]+/;
+var STAMP_RE = /^(\d{1,3}):([0-5]?\d)(?::([0-5]?\d))?$/;
+
+var uidCounter = 0;
+function uid(prefix) { uidCounter += 1; return prefix + "-" + uidCounter; }
+
+function splitLines(text) {
+  var out = [], i = 0, start = 0, n = text.length;
+  while (i < n) {
+    if (text[i] === "\n") {
+      var j = (i > start && text[i - 1] === "\r") ? i - 1 : i;
+      out.push({ text: text.slice(start, j), eol: text.slice(j, i + 1) });
+      i += 1; start = i;
+    } else { i += 1; }
+  }
+  if (start < n) out.push({ text: text.slice(start), eol: "" });
+  return out;
+}
+
+function parseStamp(s) {
+  if (typeof s !== "string") return NaN;
+  var m = STAMP_RE.exec(s.trim());
+  if (!m) return NaN;
+  if (m[3] === undefined) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  return parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseInt(m[3], 10);
+}
+
+// 本文の 1 行には改行が入らない。貼り付けや IME の改行は空白にする。
+// 改行を含まない入力はそのまま返す（触っていない行が 1 バイトも変わらないため）。
+function sanitizeBodyText(value) {
+  var s = value === null || value === undefined ? "" : String(value);
+  if (!/[\r\n\u2028\u2029\u0085]/.test(s)) return s;
+  return s.replace(/[\r\n\u2028\u2029\u0085]+/g, " ").trim();
+}
+
+// シート全体でいちばん多い改行（CRLF / LF / CR）
+function dominantEol(items) {
+  var crlf = 0, lf = 0, cr = 0;
+  for (var i = 0; i < items.length; i++) {
+    var e = items[i].eol;
+    if (e === "\r\n") crlf += 1;
+    else if (e === "\n") lf += 1;
+    else if (e === "\r") cr += 1;
+  }
+  if (crlf > lf && crlf > cr) return "\r\n";
+  if (cr > lf && cr > crlf) return "\r";
+  return "\n";
+}
+
+function formatStamp(seconds, style) {
+  seconds = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (style === "h" || seconds >= 3600) {
+    var h = Math.floor(seconds / 3600);
+    var mm = Math.floor((seconds % 3600) / 60);
+    var ss = seconds % 60;
+    return h + ":" + pad2(mm) + ":" + pad2(ss);
+  }
+  return pad2(Math.floor(seconds / 60)) + ":" + pad2(seconds % 60);
+}
+
+function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+function parseSheet(text) {
+  // UTF-8 の BOM は先頭から取り除いて覚えておき、保存時に戻す
+  var bom = "";
+  if (text.charCodeAt(0) === 0xFEFF) { bom = "\uFEFF"; text = text.slice(1); }
+  var lines = splitLines(text);
+  var items = [];
+  var i;
+
+  // ---- front matter ----
+  var fmEnd = -1;
+  if (lines.length && lines[0].text.replace(/^\uFEFF/, "").trim() === "---") {
+    for (i = 1; i < lines.length; i++) {
+      if (lines[i].text.trim() === "---") { fmEnd = i; break; }
+    }
+  }
+  var hasFront = fmEnd > 0;
+  var statusIndex = -1;
+  for (i = 0; i < lines.length; i++) {
+    if (hasFront && i > 0 && i < fmEnd && /^status[ \t]*:/.test(lines[i].text)) {
+      statusIndex = i;
+      break;
+    }
+  }
+
+  // ---- 本文のパターン判定 ----
+  var bodyStyle = "m";
+  for (i = 0; i < lines.length; i++) {
+    var mm = BODY_RE.exec(lines[i].text);
+    if (mm) {
+      if (/^\d{1,3}:[0-5]?\d:[0-5]?\d$/.test(mm[2].trim())) bodyStyle = "h";
+      break;
+    }
+  }
+
+  var inTerms = false;
+  var lastBody = null;
+
+  for (i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    var txt = ln.text;
+
+    if (i === statusIndex) {
+      items.push({ kind: "raw", text: txt, eol: ln.eol, status: true });
+      continue;
+    }
+
+    // 固有名詞セクション
+    if (H3_RE.test(txt)) { inTerms = /固有名詞/.test(txt); lastBody = null; }
+    else if (inTerms && TERM_RE.test(txt)) {
+      var pm = TERM_RE.exec(txt);
+      items.push({
+        kind: "term", prefix: pm[0], value: txt.slice(pm[0].length),
+        eol: ln.eol, deleted: false, id: uid("term"),
+      });
+      continue;
+    }
+
+    var bm = BODY_RE.exec(txt);
+    if (bm) {
+      var body = {
+        kind: "body",
+        bullet: bm[1],
+        stamp: bm[2],
+        gap: bm[3],
+        text: bm[4],
+        eol: ln.eol,
+        style: /^\d{1,3}:[0-5]?\d:[0-5]?\d$/.test(bm[2].trim()) ? "h" : "m",
+        qws: [],
+        deleted: false,
+        id: uid("body"),
+      };
+      items.push(body);
+      lastBody = body;
+      continue;
+    }
+
+    if (lastBody && QW_RE.test(txt)) {
+      lastBody.qws.push({ text: txt, eol: ln.eol });
+      continue;
+    }
+
+    items.push({ kind: "raw", text: txt, eol: ln.eol });
+    lastBody = null;
+  }
+
+  return {
+    items: items,
+    hasFront: hasFront,
+    statusIndex: statusIndex,
+    style: bodyStyle,
+    bom: bom,
+    eol: dominantEol(items),
+    trailingNewline: text.length === 0 || /\n$/.test(text) || /\r$/.test(text),
+  };
+}
+
+function itemToText(it) {
+  if (it.kind === "body") {
+    return it.bullet + "[" + it.stamp + "]" + it.gap + it.text + it.eol +
+      it.qws.map(function (q) { return q.text + q.eol; }).join("");
+  }
+  if (it.kind === "term") return it.prefix + it.value + it.eol;
+  return it.text + it.eol;
+}
+
+// 本文行を実際の行（qw 行を含む）として順に並べる
+function flattenLines(items) {
+  var out = [];
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (it.kind === "body") {
+      out.push(it);
+      for (var j = 0; j < it.qws.length; j++) out.push(it.qws[j]);
+    } else {
+      out.push(it);
+    }
+  }
+  return out;
+}
+
+// 末尾の行以外で改行が抜けている行には改行を足す（行を足したり並べ替えたりした直後用）。
+// ファイル全体の最後の行は「末尾に改行が無かった」を保つために eol をそのまま残す。
+function fixMissingEols(items, eol) {
+  var lines = flattenLines(items);
+  for (var i = 0; i < lines.length - 1; i++) {
+    if (!lines[i].eol) lines[i].eol = eol;
+  }
+  return items;
+}
+
+function stampKey(it) {
+  var s = parseStamp(it.stamp);
+  return isFinite(s) ? s : Number.MAX_SAFE_INTEGER;
+}
+
+// 時刻が昇順になっていれば並べ替え不要（保存時に 1 バイトも動かさない）。
+function needsSort(items) {
+  var prev = -Infinity;
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (it.kind !== "body" || it.deleted) continue;
+    var k = stampKey(it);
+    if (k < prev) return true;
+    prev = k;
+  }
+  return false;
+}
+
+// 時刻順に並べた新しい配列を返す（渡された配列は動かさない）。
+function sortedBodyItems(items) {
+  var slots = [], objs = [], copy = items.slice();
+  for (var i = 0; i < copy.length; i++) {
+    if (copy[i].kind === "body") { slots.push(i); objs.push(copy[i]); }
+  }
+  var sorted = objs.slice().sort(function (a, b) { return stampKey(a) - stampKey(b); });
+  for (var j = 0; j < slots.length; j++) copy[slots[j]] = sorted[j];
+  return copy;
+}
+
+// 画面側で並べ替えるとき用（配列そのものを動かす）
+function reorderBodyByTime(items) {
+  var sorted = sortedBodyItems(items);
+  for (var i = 0; i < items.length; i++) items[i] = sorted[i];
+  return items;
+}
+
+// 保存の出力だけを作る。doc.items は並べ替えない（入力欄のフォーカスや IME を壊さないため）。
+function serializeSheet(doc) {
+  var items = doc.items.filter(function (it) { return !(it.deleted && it.kind !== "raw"); });
+  if (needsSort(items)) items = sortedBodyItems(items);
+  var eol = doc.eol || dominantEol(items) || "\n";
+  fixMissingEols(items, eol);
+  // 元のシートに末尾の改行が無くて並べ替えで増えていたら、戻す
+  if (doc.trailingNewline === false) {
+    var lines = flattenLines(items);
+    if (lines.length) lines[lines.length - 1].eol = "";
+  }
+  var out = "";
+  for (var i = 0; i < items.length; i++) out += itemToText(items[i]);
+  return (doc.bom || "") + out;
+}
+
+function findBody(doc) {
+  return doc.items.filter(function (it) { return it.kind === "body" && !it.deleted; });
+}
+
+function statusValue(doc) {
+  for (var i = 0; i < doc.items.length; i++) {
+    if (doc.items[i].status) {
+      var m = /^[ \t]*status[ \t]*:[ \t]*(.*?)([ \t]*(#.*)?)$/.exec(doc.items[i].text);
+      return m ? m[1].trim() : "";
+    }
+  }
+  return "";
+}
+
+function setStatus(doc, value) {
+  for (var i = 0; i < doc.items.length; i++) {
+    var it = doc.items[i];
+    if (!it.status) continue;
+    var m = /(^status[ \t]*:[ \t]*)(.*?)([ \t]*(#.*)?)$/.exec(it.text);
+    it.text = m ? m[1] + value + (m[3] || "") : "status: " + value;
+    return true;
+  }
+  if (!doc.hasFront) return false;
+  // status 行が無いので閉じる ---（2 つ目）の直前に足す
+  var seen = 0, close = -1;
+  for (var j = 0; j < doc.items.length; j++) {
+    if (doc.items[j].kind === "raw" && doc.items[j].text.trim() === "---") {
+      seen += 1;
+      if (seen === 2) { close = j; break; }
+    }
+  }
+  if (close <= 0) return false;
+  var eol = doc.items[close].eol || doc.items[close - 1].eol || "\n";
+  doc.items.splice(close, 0, { kind: "raw", text: "status: " + value, eol: eol, status: true });
+  return true;
+}
+
+function setBodyText(doc, id, value) {
+  var it = findItem(doc, id);
+  if (!it || it.kind !== "body") return false;
+  var clean = sanitizeBodyText(value);
+  if (it.text === clean) return false;
+  it.text = clean;
+  return true;
+}
+
+function findItem(doc, id) {
+  for (var i = 0; i < doc.items.length; i++) if (doc.items[i].id === id) return doc.items[i];
+  return null;
+}
+
+function bodyNeighbour(doc, id, delta) {
+  var list = findBody(doc);
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].id === id) {
+      var j = i + delta;
+      return (j >= 0 && j < list.length) ? list[j] : null;
+    }
+  }
+  return null;
+}
+
+// アイテムの中で最後の行（qw があれば qw の最後）
+function lastLineOf(it) {
+  if (it.kind === "body" && it.qws.length) return it.qws[it.qws.length - 1];
+  return it;
+}
+
+function addBodyAfter(doc, id, seconds) {
+  var ref = findItem(doc, id);
+  if (!ref || ref.kind !== "body") return null;
+  // qw 行は body アイテムの中に畳み込まれているので、1 つ後ろが「直後の行」。
+  var at = doc.items.indexOf(ref) + 1;
+  var eol = ref.eol;
+  // シートの末尾に改行が無い状態は、新しい行が引き継ぐ（行がつながらないようにする）
+  var tail = lastLineOf(ref);
+  if (!tail.eol) {
+    tail.eol = doc.eol || "\n";
+    eol = "";
+  }
+  var it = {
+    kind: "body", bullet: ref.bullet, stamp: formatStamp(seconds, doc.style), gap: ref.gap,
+    text: "", eol: eol, style: ref.style, qws: [], deleted: false, id: uid("body"),
+  };
+  doc.items.splice(at, 0, it);
+  return it;
+}
+
+function deleteBody(doc, id) {
+  var it = findItem(doc, id);
+  if (!it || it.kind !== "body") return false;
+  if (it.text.trim() !== "") return false;
+  it.deleted = true;
+  return true;
+}
+
+function findTerm(doc, id) {
+  for (var i = 0; i < doc.items.length; i++) {
+    if (doc.items[i].kind === "term" && doc.items[i].id === id) return doc.items[i];
+  }
+  return null;
+}
+
+function setTermValue(doc, id, value) {
+  var it = findTerm(doc, id);
+  if (!it) return false;
+  it.value = value;
+  return true;
+}
+
+function addTerm(doc, value) {
+  var last = null, at = -1;
+  for (var i = 0; i < doc.items.length; i++) {
+    var it = doc.items[i];
+    if (it.kind === "term") { last = it; at = i + 1; continue; }
+    if (at > -1 && it.kind === "raw" && H3_RE.test(it.text)) break;  // 次の見出しで打ち切り
+  }
+  var fresh = {
+    kind: "term", prefix: last ? (last.prefix || "- ") : "- ", value: value || "",
+    eol: last ? (last.eol || "\n") : "\n", deleted: false, id: uid("term"),
+  };
+  doc.items.splice(at > -1 ? at : afterTermsHeading(doc), 0, fresh);
+  return fresh;
+}
+
+// 固有名詞の見出しの直後（空行は残す）
+function afterTermsHeading(doc) {
+  for (var i = 0; i < doc.items.length; i++) {
+    var it = doc.items[i];
+    if (it.kind !== "raw" || !H3_RE.test(it.text) || !/固有名詞/.test(it.text)) continue;
+    var j = i + 1;
+    while (j < doc.items.length && doc.items[j].kind === "raw" && doc.items[j].text.trim() === "") j++;
+    return j;
+  }
+  return doc.items.length;
+}
+
+function deleteTerm(doc, id) {
+  var it = findTerm(doc, id);
+  if (!it) return false;
+  it.deleted = true;
+  return true;
+}
+
+var TRUTH_EDIT_API = {
+  splitLines: splitLines,
+  parseStamp: parseStamp,
+  formatStamp: formatStamp,
+  parseSheet: parseSheet,
+  serializeSheet: serializeSheet,
+  reorderBodyByTime: reorderBodyByTime,
+  sortedBodyItems: sortedBodyItems,
+  needsSort: needsSort,
+  sanitizeBodyText: sanitizeBodyText,
+  dominantEol: dominantEol,
+  fixMissingEols: fixMissingEols,
+  flattenLines: flattenLines,
+  lastLineOf: lastLineOf,
+  findBody: findBody,
+  findItem: findItem,
+  bodyNeighbour: bodyNeighbour,
+  setStatus: setStatus,
+  statusValue: statusValue,
+  setBodyText: setBodyText,
+  addBodyAfter: addBodyAfter,
+  deleteBody: deleteBody,
+  setTermValue: setTermValue,
+  addTerm: addTerm,
+  deleteTerm: deleteTerm,
+};
+
+/* =====================================================================
+    以下は画面側（node では実行されない）
+   ===================================================================== */
+
+function $(id) { return document.getElementById(id); }
+
+var KEY = { THEME: "auto", LEGEND: "open" };
+
+var el = {};
+var doc = null;
+var rows = [];          // { id, box, ta, qw, stampEl, rangeEl, item }
+var cur = -1;           // 現在行の rows 内インデックス
+var pad = 0.3;
+var speed = 1;
+var loopOn = true;
+var oneShotSlow = false;
+var rowEndAt = null;
+var rowLoop = true;
+var editCount = 0;      // 増えるだけ
+var savedCount = 0;     // 直近の保存が拾った editCount
+var saving = false;     // 保存が進行中か
+var pendingSave = false;// 保存中に要求された保存（後で 1 回にまとめる）
+var conflict = false;   // 409 が返ったら、書き込まずに止める
+var etag = "";          // GET /sheet・PUT /sheet の ETag（If-Match に使う）
+var saveTimer = 0;
+var rafId = 0;
+var internalSeek = false;
+
+function isDirty() { return editCount > savedCount; }
+
+function fmtClock(s) {
+  if (!isFinite(s) || s < 0) s = 0;
+  var t = Math.floor(s);
+  var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), ss = t % 60;
+  return (h ? h + ":" + pad2(m) : m) + ":" + pad2(ss);
+}
+
+/* ---------------- 保存 ---------------- */
+
+function setSaveState(state, text) {
+  el.save.className = "";
+  if (state) el.save.classList.add(state);
+  el.save.textContent = text;
+}
+
+function showError(msg) {
+  el.errbar.textContent = "";
+  el.errbar.appendChild(document.createTextNode(msg));
+  var again = document.createElement("button");
+  again.type = "button";
+  again.textContent = "読み直す";
+  again.style.marginLeft = "10px";
+  again.addEventListener("click", function () { reload(); });
+  el.errbar.appendChild(again);
+  el.errbar.hidden = false;
+}
+
+function hideError() { el.errbar.hidden = true; el.errbar.textContent = ""; }
+
+function clearSaveTimer() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
+}
+
+// 編集 happened を数える。保存中に編集しても editCount だけ増えるので失われない。
+function markEdited() {
+  editCount += 1;
+  if (!conflict) setSaveState("dirty", "未保存");
+  scheduleSave();
+}
+
+function scheduleSave(delay) {
+  clearSaveTimer();
+  if (conflict || !doc || !isDirty()) return;
+  saveTimer = setTimeout(function () { saveTimer = 0; save(); }, delay === undefined ? 2000 : delay);
+}
+
+function timeLabel() {
+  var t = new Date();
+  return pad2(t.getHours()) + ":" + pad2(t.getMinutes()) + ":" + pad2(t.getSeconds());
+}
+
+function save() {
+  clearSaveTimer();
+  if (conflict) { showConflict(); return Promise.resolve(false); }
+  if (!doc) return Promise.resolve(false);
+  if (saving) { pendingSave = true; return Promise.resolve(false); }
+
+  var countAtStart = editCount;      // この保存が拾う編集
+  var text;
+  try {
+    text = serializeSheet(doc);
+  } catch (err) {
+    failSave("直列化に失敗しました: " + err.message);
+    return Promise.resolve(false);
+  }
+
+  var headers = { "Content-Type": "text/plain; charset=utf-8" };
+  if (etag) headers["If-Match"] = etag;
+
+  saving = true;
+  setSaveState("saving", "保存中…");
+  return fetch("/sheet", { method: "PUT", headers: headers, body: text })
+    .then(function (res) {
+      return res.text().then(function (t) {
+        var data = null;
+        try { data = JSON.parse(t); } catch (e) { data = null; }
+        var got = res.headers && res.headers.get ? res.headers.get("ETag") : null;
+        if (res.status === 409) return { conflict: true, data: data, etag: got };
+        if (!res.ok || !data || !data.ok) {
+          throw new Error((data && data.error) || ("HTTP " + res.status));
+        }
+        return { ok: true, data: data, etag: got };
+      });
+    })
+    .then(function (r) {
+      if (r.conflict) { onConflict(r); return false; }
+      if (r.etag) etag = r.etag;
+      savedCount = Math.max(savedCount, countAtStart);
+      hideError();
+      if (isDirty()) setSaveState("dirty", "未保存");
+      else {
+        setSaveState("saved", "保存 " + timeLabel());
+        if (!isRowInput()) reorderScreen();   // 入力中でなければ画面もファイルに合わせる
+      }
+      return true;
+    })
+    .catch(function (err) {
+      failSave("保存に失敗しました: " + err.message);
+      return false;
+    })
+    .then(function (ok) {
+      saving = false;
+      // 保存中に入った編集は 1 回にまとめて送る
+      if (!conflict && (pendingSave || isDirty())) { pendingSave = false; scheduleSave(); }
+      return ok;
+    });
+}
+
+// 409: サーバの値が自分の読み込み時と違う。まだ書けていないので何も上書きしない。
+function onConflict(r) {
+  conflict = true;
+  clearSaveTimer();
+  pendingSave = false;
+  setSaveState("err", "競合");
+  if (r && r.etag) etag = r.etag;
+  showConflict();
+}
+
+function showConflict() {
+  showError(
+    "他のプログラムが先に書き換えていて衝突しました。今の編集はまだファイルに入っていません。" +
+    "自動保存は止まりました（既存のシートを上書きしません）。読み直してから編集し直してください。"
+  );
+}
+
+function failSave(msg) {
+  setSaveState("err", "保存失敗");
+  showError(msg + "（自動保存は 2 秒後に再試行します。Cmd+S でもう一度）");
+  if (!conflict) scheduleSave(2000);
+}
+
+function reload() {
+  clearSaveTimer();
+  hideError();
+  fetch("/sheet", { cache: "no-store" }).then(function (r) {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    var got = r.headers && r.headers.get ? r.headers.get("ETag") : null;
+    return r.text().then(function (t) { return { text: t, etag: got }; });
+  }).then(function (r) {
+    doc = parseSheet(r.text);
+    etag = r.etag || "";
+    conflict = false;
+    editCount = 0;
+    savedCount = 0;
+    pendingSave = false;
+    renderAll();
+    renderTerms();
+    setSaveState("", "読み込み済み");
+    updateCount();
+    el.player.load();
+  }).catch(function (err) {
+    setSaveState("err", "読み込み失敗");
+    showError("シートを読み直せませんでした: " + err.message);
+  });
+}
+
+/* ---------------- 再生 ---------------- */
+
+function duration() {
+  var d = el.player.duration;
+  return isFinite(d) && d > 0 ? d : 0;
+}
+
+function rowStartOf(i) {
+  return Math.max(0, parseStamp(rows[i].item.stamp) - pad);
+}
+
+function rowEndOf(i) {
+  var end = (i + 1 < rows.length) ? parseStamp(rows[i + 1].item.stamp) + pad : duration();
+  if (!isFinite(end)) end = 0;
+  return Math.min(end, duration() || end);
+}
+
+function playRow(i, opts) {
+  opts = opts || {};
+  if (i < 0 || i >= rows.length) return;
+  if (el.player.readyState < 1) {
+    pendingPlay = i;
+    pendingLoop = (opts.loop !== false);
+    return;
+  }
+  oneShotSlow = !!opts.slow;
+  rowLoop = (opts.loop !== false) && (opts.slow ? false : loopOn);
+  applyRate();
+  var start = rowStartOf(i);
+  var dur = duration();
+  if (dur > 0 && start >= dur) start = Math.max(0, dur - 0.05);
+  seekTo(start);
+  rowEndAt = dur > 0 ? rowEndOf(i) : null;
+  el.player.play().catch(function () { /* 自動再生が弾かれたとき */ });
+  startWatch();
+}
+
+var pendingPlay = -1;
+var pendingLoop = true;
+
+function seekTo(t) {
+  internalSeek = true;
+  try { el.player.currentTime = t; } catch (e) { internalSeek = false; }
+}
+
+function applyRate() {
+  el.player.playbackRate = oneShotSlow ? 0.7 : speed;
+}
+
+function stopOneShot() {
+  if (!oneShotSlow) return;
+  oneShotSlow = false;
+  applyRate();
+}
+
+function togglePlay() {
+  if (el.player.paused) {
+    if (cur >= 0) { playRow(cur); } else { el.player.play().catch(function () {}); startWatch(); }
+  } else {
+    el.player.pause();
+    stopWatch();
+  }
+}
+
+// 再生中は requestAnimationFrame で区間の終わりを見る（timeupdate だけでは粗い）
+function needsWatch() { return rowEndAt !== null && !el.player.paused; }
+
+function startWatch() {
+  if (rafId || !needsWatch()) return;
+  if (typeof requestAnimationFrame !== "function") return;
+  rafId = requestAnimationFrame(frame);
+}
+
+function stopWatch() {
+  if (!rafId) return;
+  if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(rafId);
+  rafId = 0;
+}
+
+function frame() {
+  rafId = 0;
+  onTime();
+  if (needsWatch()) rafId = requestAnimationFrame(frame);
+}
+
+// ループ中に区間外へシークされたら、巻き戻さずループを解除する
+function onSeeking() {
+  if (internalSeek) { internalSeek = false; return; }
+  if (rowEndAt === null || cur < 0) return;
+  var t = el.player.currentTime;
+  var s = rowStartOf(cur);
+  if (t < s - SEEK_SLACK || t > rowEndAt + SEEK_SLACK) {
+    rowEndAt = null;
+    rowLoop = false;
+  }
+}
+
+var SEEK_SLACK = 0.5;
+
+function onTime() {
+  var d = duration();
+  el.pos.textContent = fmtClock(el.player.currentTime) + " / " + (d ? fmtClock(d) : "--:--") +
+    (cur >= 0 ? "　" + (cur + 1) + " / " + rows.length + " 行目" : "");
+  el.seekfill.style.width = (d ? Math.min(100, (el.player.currentTime / d) * 100) : 0) + "%";
+  if (rowEndAt !== null && !el.player.paused && el.player.currentTime >= rowEndAt) {
+    if (rowLoop && cur >= 0) {
+      seekTo(rowStartOf(cur));
+      if (el.player.paused) el.player.play().catch(function () {});
+      startWatch();
+    } else {
+      el.player.pause();
+      try { el.player.currentTime = rowEndAt; } catch (e) {}
+      stopWatch();
+    }
+    stopOneShot();
+  }
+}
+
+function updateZone() {
+  if (cur < 0 || !rows.length) { el.seekzone.hidden = true; return; }
+  var d = duration();
+  if (!d) { el.seekzone.hidden = true; return; }
+  var a = Math.max(0, rowStartOf(cur));
+  var b = rowEndOf(cur);
+  if (!(b > a)) { el.seekzone.hidden = true; return; }
+  el.seekzone.hidden = false;
+  el.seekzone.style.left = (a / d * 100) + "%";
+  el.seekzone.style.width = ((b - a) / d * 100) + "%";
+}
+
+/* ---------------- 行の描画 ---------------- */
+
+function autosize(ta) {
+  ta.style.height = "auto";
+  ta.style.height = ta.scrollHeight + "px";
+}
+
+function renderAll() {
+  el.rows.textContent = "";
+  rows = [];
+  var list = findBody(doc);
+  if (!list.length) {
+    var p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = "本文（- [mm:ss] 本文）が見つかりませんでした。";
+    el.rows.appendChild(p);
+  }
+  list.forEach(function (item) { rows.push(makeRow(item)); });
+  cur = rows.length ? 0 : -1;
+  for (var i = 0; i < rows.length; i++) el.rows.appendChild(rows[i].box);
+  markCurrent(false);
+  updateCount();
+  syncDone();
+  updateZone();
+}
+
+function makeRow(item) {
+  var box = document.createElement("div");
+  box.className = "row";
+  box.dataset.id = item.id;
+
+  var stamp = document.createElement("div");
+  stamp.className = "stamp";
+  stamp.title = "この行の区間を再生";
+  var range = document.createElement("span");
+  range.className = "range";
+  stamp.appendChild(document.createTextNode("[" + item.stamp + "]"));
+  stamp.appendChild(range);
+
+  var body = document.createElement("div");
+  body.className = "body";
+
+  var ta = document.createElement("textarea");
+  ta.className = "txt";
+  ta.rows = 1;
+  ta.spellcheck = false;
+  ta.value = item.text;
+  ta.addEventListener("input", function () { onRowInput(item, ta); });
+  // 貼り付けは改行を空白にして 1 行に収める
+  ta.addEventListener("paste", function (ev) {
+    var text = (ev.clipboardData && ev.clipboardData.getData("text/plain")) || "";
+    if (!/[\r\n\u2028\u2029\u0085]/.test(text)) return;   // そのまま既定に任せる
+    ev.preventDefault();
+    var clean = sanitizeBodyText(text);
+    var s = ta.selectionStart, e = ta.selectionEnd;
+    ta.value = ta.value.slice(0, s) + clean + ta.value.slice(e);
+    var pos = s + clean.length;
+    ta.setSelectionRange(pos, pos);
+    onRowInput(item, ta);
+  });
+
+  var qw = document.createElement("div");
+  qw.className = "qw";
+  renderQw(item, qw, ta);
+
+  body.appendChild(ta);
+  body.appendChild(qw);
+
+  stamp.addEventListener("click", function (ev) { ev.stopPropagation(); selectRow(indexOfRow(item.id), true); });
+  box.addEventListener("click", function (ev) {
+    if (ev.target === ta) return;
+    selectRow(indexOfRow(item.id), true);
+    ta.focus();
+  });
+  ta.addEventListener("focus", function () { selectRow(indexOfRow(item.id), false); });
+  ta.addEventListener("click", function () { selectRow(indexOfRow(item.id), false); });
+  // 入力欄からフォーカスが外れたタイミングでだけ、画面の並びをファイルに合わせる
+  ta.addEventListener("focusout", function () {
+    setTimeout(function () { if (!isRowInput()) reorderScreen(); }, 0);
+  });
+
+  box.appendChild(stamp);
+  box.appendChild(body);
+
+  var row = { id: item.id, box: box, ta: ta, qw: qw, stampEl: stamp, rangeEl: range, item: item };
+  return row;
+}
+
+function renderQw(item, qw, ta) {
+  qw.textContent = "";
+  if (!item.qws.length) {
+    qw.className = "qw none";
+    qw.textContent = "（qw なし）";
+    return;
+  }
+  qw.className = "qw";
+  var text = item.qws.map(function (q) {
+    var m = /^[ \t]*<!--[ \t]*qw:[ \t]*(.*?)[ \t]*-->[ \t]*$/.exec(q.text);
+    return m ? m[1] : q.text;
+  }).join(" ／ ");
+  var tag = document.createElement("span");
+  tag.className = "tag";
+  tag.textContent = "qw";
+  qw.appendChild(tag);
+  qw.appendChild(document.createTextNode(text));
+  qw.title = "クリックで本文のカーソル位置に移します";
+  qw.addEventListener("click", function () {
+    var s = ta.selectionStart, e = ta.selectionEnd;
+    if (document.activeElement !== ta) { s = e = ta.value.length; }
+    var ins = text;
+    ta.value = ta.value.slice(0, s) + ins + ta.value.slice(e);
+    setBodyText(doc, item.id, ta.value);
+    var pos = s + ins.length;
+    ta.focus();
+    ta.setSelectionRange(pos, pos);
+    autosize(ta);
+    markEdited();
+  });
+}
+
+function indexOfRow(id) {
+  for (var i = 0; i < rows.length; i++) if (rows[i].id === id) return i;
+  return -1;
+}
+
+// 入力欄からの入力（typed / pasted / IME）。本文には改行を残さない。
+function onRowInput(item, ta) {
+  autosize(ta);
+  if (/[\r\n\u2028\u2029\u0085]/.test(ta.value)) {
+    var clean = sanitizeBodyText(ta.value);
+    var pos = Math.min(ta.selectionStart || 0, clean.length);
+    ta.value = clean;
+    ta.setSelectionRange(pos, pos);
+  }
+  if (setBodyText(doc, item.id, ta.value)) markEdited();
+  updateCount();
+}
+
+function updateCount() {
+  var done = countNonEmpty();
+  el.count.textContent = rows.length + " 行" + (rows.length ? " / 埋めた " + done : "");
+}
+
+function countNonEmpty() {
+  return findBody(doc).filter(function (it) { return it.text.trim() !== ""; }).length;
+}
+
+function markCurrent(scroll) {
+  for (var i = 0; i < rows.length; i++) rows[i].box.classList.toggle("cur", i === cur);
+  if (cur >= 0) {
+    var end = rowEndOf(cur);
+    rows[cur].rangeEl.textContent = fmtClock(Math.max(0, parseStamp(rows[cur].item.stamp))) +
+      "–" + (end > 0 ? fmtClock(end) : "END");
+    updateZone();
+    if (scroll) rows[cur].box.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function selectRow(i, play) {
+  if (i < 0 || i >= rows.length) return;
+  cur = i;
+  markCurrent(true);
+  if (play) playRow(i);
+}
+
+function go(delta, play) {
+  var n = cur + delta;
+  if (n < 0) n = 0;
+  if (n > rows.length - 1) n = rows.length - 1;
+  if (n === cur && play) { playRow(cur); return; }
+  selectRow(n, play);
+  if (rows[n]) rows[n].ta.focus();
+}
+
+function syncDone() {
+  var done = statusValue(doc) === "校正済み";
+  el.done.checked = done;
+  el.donewrap.title = doc.hasFront
+    ? "front matter の status を " + (done ? "未校正" : "校正済み") + " に書き換えます"
+    : "front matter がありません";
+  el.done.disabled = !doc.hasFront;
+  updateCount();
+}
+
+function setDone(on) {
+  if (!setStatus(doc, on ? "校正済み" : "未校正")) return;
+  syncDone();
+  markEdited();
+}
+
+/* ---------------- 固有名詞 ---------------- */
+
+function renderTerms() {
+  el.terms.textContent = "";
+  var list = doc.items.filter(function (it) { return it.kind === "term" && !it.deleted; });
+  list.forEach(function (item) {
+    var li = document.createElement("li");
+    var input = document.createElement("input");
+    input.type = "text";
+    input.value = item.value;
+    input.spellcheck = false;
+    input.placeholder = "語";
+    input.addEventListener("input", function () {
+      if (setTermValue(doc, item.id, input.value)) markEdited();
+    });
+    var del = document.createElement("button");
+    del.className = "del";
+    del.type = "button";
+    del.textContent = "×";
+    del.title = "この語を削除";
+    del.addEventListener("click", function () {
+      deleteTerm(doc, item.id);
+      renderTerms();
+      markEdited();
+    });
+    li.appendChild(input);
+    li.appendChild(del);
+    el.terms.appendChild(li);
+  });
+  if (!list.length) {
+    var li = document.createElement("li");
+    var input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "（空）＋ で追加";
+    input.disabled = true;
+    li.appendChild(input);
+    el.terms.appendChild(li);
+  }
+}
+
+/* ---------------- 行の並び替え ---------------- */
+
+function refreshLabel(row) {
+  var text = "[" + row.item.stamp + "]";
+  var node = row.stampEl.firstChild;
+  if (node && node.nodeValue !== text) node.nodeValue = text;
+}
+
+// 画面上の並びを時刻順に合わせる。doc.items は動かさない（保存の出力だけが時刻順）。
+// 行 DOM は自分の行に付いたまま動くので、入力内容は失われない。
+function reorderScreen() {
+  if (rows.length < 2) return false;
+  var sorted = sortedBodyItems(rows.map(function (r) { return r.item; }));
+  var same = true;
+  for (var i = 0; i < sorted.length; i++) if (sorted[i] !== rows[i].item) { same = false; break; }
+  if (same) return false;
+  var byId = {};
+  for (var j = 0; j < rows.length; j++) byId[rows[j].id] = rows[j];
+  var curId = cur >= 0 ? rows[cur].id : null;
+  var next = [];
+  for (var k = 0; k < sorted.length; k++) {
+    var row = byId[sorted[k].id];
+    if (!row) return false;
+    next.push(row);
+  }
+  rows = next;
+  for (var n = 0; n < next.length; n++) el.rows.appendChild(next[n].box);
+  var at = curId ? indexOfRow(curId) : -1;
+  cur = at;
+  markCurrent(false);
+  return true;
+}
+
+/* ---------------- キー ---------------- */
+
+function isTextInput(t) {
+  return t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT");
+}
+
+// 本文の入力欄にカーソルがあるか
+function isRowInput() {
+  var a = document.activeElement;
+  return !!(a && a.classList && a.classList.contains("txt") && isTextInput(a));
+}
+
+// IME 変換中は無視する（Enter / Esc / Option+/ を奪わない）
+function isComposing(ev) {
+  return !!(ev.isComposing || ev.keyCode === 229);
+}
+
+function onKey(ev) {
+  if (isComposing(ev)) return;
+
+  // 保存はどの位置にカーソルがなくても効く
+  if ((ev.metaKey || ev.ctrlKey) && ev.code === "KeyS") {
+    ev.preventDefault();
+    save();
+    return;
+  }
+  if (ev.metaKey || ev.ctrlKey) return;   // 他の Ctrl/Cmd には触らない
+
+  if (!isRowInput()) {
+    // 本文の入力欄にカーソルがあるときだけ効くキー
+    if (ev.key === "Escape" && !ev.repeat) { ev.preventDefault(); togglePlay(); }
+    return;
+  }
+
+  if (ev.altKey) {
+    if (ev.code === "Enter") { ev.preventDefault(); if (!ev.repeat) onEnter(ev); return; }
+    switch (ev.code) {
+      case "Space": ev.preventDefault(); if (!ev.repeat && cur >= 0) playRow(cur); return;
+      case "ArrowDown": ev.preventDefault(); if (!ev.repeat) go(1, true); return;
+      case "ArrowUp": ev.preventDefault(); if (!ev.repeat) go(-1, true); return;
+      case "ArrowLeft": ev.preventDefault(); el.player.currentTime = Math.max(0, el.player.currentTime - 2); return;
+      case "ArrowRight": ev.preventDefault(); el.player.currentTime = Math.min(duration() || Infinity, el.player.currentTime + 2); return;
+      case "KeyS": ev.preventDefault(); if (!ev.repeat && cur >= 0) playRow(cur, { slow: true, loop: false }); return;
+      case "Slash": ev.preventDefault(); if (!ev.repeat) insertMark(); return;
+      case "Backspace": ev.preventDefault(); if (!ev.repeat) deleteRow(); return;
+      case "Delete": ev.preventDefault(); if (!ev.repeat) deleteRow(); return;
+      default: return;
+    }
+  }
+
+  if (ev.code === "Enter") {
+    ev.preventDefault();
+    if (ev.repeat) return;   // 長押しで次々へ進まない
+    onEnter(ev);
+    return;
+  }
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    if (!ev.repeat) togglePlay();
+  }
+}
+
+// Enter は必ず保存する（仕様: Enter のたびに自動保存）
+function onEnter(ev) {
+  if (ev.shiftKey) addRow(); else markNext();
+  save();
+}
+
+function markNext() {
+  if (cur >= 0 && cur + 1 < rows.length) {
+    selectRow(cur + 1, true);
+    rows[cur].ta.focus();
+  } else if (cur >= 0) {
+    rows[cur].ta.blur();
+  }
+}
+
+function insertMark() {
+  if (cur < 0) return;
+  var ta = rows[cur].ta;
+  var mark = "〔？〕";
+  var s = ta.selectionStart, e = ta.selectionEnd;
+  ta.value = ta.value.slice(0, s) + mark + ta.value.slice(e);
+  setBodyText(doc, rows[cur].id, ta.value);
+  var pos = s + mark.length;
+  ta.setSelectionRange(pos, pos);
+  autosize(ta);
+  markEdited();
+}
+
+function addRow() {
+  if (cur < 0) return;
+  var t = el.player.currentTime;
+  var item = addBodyAfter(doc, rows[cur].id, isFinite(t) ? t : 0);
+  if (!item) return;
+  var row = makeRow(item);
+  var at = rows.indexOf(rows[cur]) + 1;
+  rows.splice(at, 0, row);
+  el.rows.insertBefore(row.box, rows[at + 1] ? rows[at + 1].box : null);
+  cur = at;
+  markCurrent(true);
+  row.ta.focus();
+  autosize(row.ta);
+  playRow(at);
+  markEdited();
+}
+
+function deleteRow() {
+  if (cur < 0) return;
+  var row = rows[cur];
+  if (row.ta.value.trim() !== "") {
+    row.box.classList.remove("flash");
+    void row.box.offsetWidth;
+    row.box.classList.add("flash");
+    return;
+  }
+  if (!deleteBody(doc, row.id)) return;
+  rows.splice(cur, 1);
+  row.box.remove();
+  cur = Math.min(cur, rows.length - 1);
+  updateCount();
+  markCurrent(true);
+  if (cur >= 0) { rows[cur].ta.focus(); playRow(cur); }
+  markEdited();
+}
+
+/* ---------------- 設定 ---------------- */
+
+function loadPref() {
+  try {
+    var raw = localStorage.getItem("truth_edit.pref");
+    if (raw) {
+      var p = JSON.parse(raw);
+      if (typeof p.pad === "number") pad = Math.min(1, Math.max(0, p.pad));
+      if (typeof p.speed === "number") speed = p.speed;
+      if (typeof p.loop === "boolean") loopOn = p.loop;
+      if (p.theme) KEY.THEME = p.theme;
+      if (p.legend) KEY.LEGEND = p.legend;
+    }
+  } catch (e) {}
+}
+
+function savePref() {
+  try {
+    localStorage.setItem("truth_edit.pref", JSON.stringify({
+      pad: pad, speed: speed, loop: loopOn, theme: KEY.THEME, legend: KEY.LEGEND,
+    }));
+  } catch (e) {}
+}
+
+function applyTheme() {
+  if (KEY.THEME === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", KEY.THEME);
+  el.theme.textContent = KEY.THEME === "auto" ? "配色: 自動" : (KEY.THEME === "dark" ? "配色: 暗" : "配色: 明");
+}
+
+function applySpeedButtons() {
+  var btns = el.bar.querySelectorAll("[data-rate]");
+  for (var i = 0; i < btns.length; i++) {
+    var on = Math.abs(parseFloat(btns[i].dataset.rate) - speed) < 0.001;
+    btns[i].classList.toggle("on", on);
+    btns[i].setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  applyRate();
+}
+
+/* ---------------- 起動 ---------------- */
+
+function bind() {
+  el.rows = $("rows");
+  el.terms = $("terms");
+  el.player = $("player");
+  el.pos = $("pos");
+  el.save = $("save");
+  el.errbar = $("errbar");
+  el.count = $("count");
+  el.done = $("done");
+  el.donewrap = $("donewrap");
+  el.pad = $("pad");
+  el.padval = $("padval");
+  el.loop = $("loop");
+  el.theme = $("theme");
+  el.bar = document.querySelector(".bar");
+  el.seekfill = $("seekfill");
+  el.seekzone = $("seekzone");
+
+  el.bar.querySelectorAll("[data-rate]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      speed = parseFloat(b.dataset.rate);
+      applySpeedButtons();
+      savePref();
+      if (cur >= 0 && !el.player.paused) playRow(cur);
+    });
+  });
+  el.loop.addEventListener("change", function () {
+    loopOn = el.loop.checked;
+    rowLoop = loopOn && !oneShotSlow;   // 再生中でもすぐ効く
+    savePref();
+  });
+  el.pad.addEventListener("input", function () {
+    pad = parseFloat(el.pad.value);
+    el.padval.textContent = pad.toFixed(2) + "s";
+    markCurrent(false);
+    savePref();
+  });
+  el.done.addEventListener("change", function () { setDone(el.done.checked); });
+  $("savebtn").addEventListener("click", function () { save(); });
+  $("addterm").addEventListener("click", function () {
+    var it = addTerm(doc, "");
+    renderTerms();
+    markEdited();
+    var inputs = el.terms.querySelectorAll("input:not([disabled])");
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  });
+  el.theme.addEventListener("click", function () {
+    KEY.THEME = KEY.THEME === "auto" ? "light" : (KEY.THEME === "light" ? "dark" : "auto");
+    applyTheme();
+    savePref();
+  });
+  $("legendbtn").addEventListener("click", function () {
+    KEY.LEGEND = KEY.LEGEND === "open" ? "min" : "open";
+    $("legend").classList.toggle("min", KEY.LEGEND === "min");
+    $("legendbtn").textContent = KEY.LEGEND === "open" ? "−" : "キー";
+    savePref();
+  });
+
+  el.player.addEventListener("timeupdate", onTime);
+  el.player.addEventListener("durationchange", onTime);
+  el.player.addEventListener("seeking", onSeeking);
+  el.player.addEventListener("seeked", function () { internalSeek = false; });
+  el.player.addEventListener("loadedmetadata", function () {
+    onTime();
+    updateZone();
+    if (pendingPlay >= 0) { var i = pendingPlay; var lp = pendingLoop; pendingPlay = -1; playRow(i, { loop: lp }); }
+  });
+  el.player.addEventListener("pause", function () { stopOneShot(); stopWatch(); onTime(); });
+  el.player.addEventListener("ended", function () {
+    stopOneShot();
+    // 最後の行は音声の終わりでもループする
+    if (rowLoop && cur >= 0 && cur === rows.length - 1) {
+      seekTo(rowStartOf(cur));
+      el.player.play().catch(function () {});
+      startWatch();
+    } else {
+      rowEndAt = null;
+      stopWatch();
+    }
+    onTime();
+  });
+  el.player.addEventListener("error", function () {
+    showError("音声を読み込めませんでした（シートと同じ名前の .mp3 があるか確認してください）。本文の編集はできます。");
+  });
+  el.seekfill.parentNode.addEventListener("click", function (ev) {
+    var box = el.seekfill.parentNode.getBoundingClientRect();
+    var ratio = (ev.clientX - box.left) / box.width;
+    el.player.currentTime = Math.max(0, Math.min(1, ratio)) * duration();
+  });
+  window.addEventListener("resize", function () {
+    rows.forEach(function (r) { autosize(r.ta); });
+  });
+  document.addEventListener("keydown", onKey);
+  window.addEventListener("beforeunload", function (ev) {
+    if (isDirty() || saving || pendingSave) { ev.preventDefault(); ev.returnValue = ""; }
+  });
+}
+
+function boot() {
+  loadPref();
+  bind();
+  applyTheme();
+  applySpeedButtons();
+  el.loop.checked = loopOn;
+  el.pad.value = pad;
+  el.padval.textContent = pad.toFixed(2) + "s";
+  $("legend").classList.toggle("min", KEY.LEGEND === "min");
+  $("legendbtn").textContent = KEY.LEGEND === "open" ? "−" : "キー";
+  reload();
+}
+
+if (typeof module === "object" && module !== null && typeof module.exports === "object") {
+  module.exports = TRUTH_EDIT_API;
+}
+if (typeof document !== "undefined" && document && document.addEventListener) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+}
+</script>
+</body>
+</html>

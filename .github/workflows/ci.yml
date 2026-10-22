@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Test (macOS)
+        if: runner.os == 'macOS'
+        run: uv run --python 3.12 --group dev pytest -q
+      - name: Test (Linux)
+        if: runner.os == 'Linux'
+        run: uv run --python 3.12 --extra cpu --group dev pytest -q
+
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck install.sh
+        run: shellcheck install.sh
+
+  windows-script:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse install.ps1
+        shell: pwsh
+        run: |
+          $e = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/install.ps1", [ref]$null, [ref]$e) | Out-Null
+          if ($e.Count) { $e | ForEach-Object { Write-Error $_.Message }; exit 1 }

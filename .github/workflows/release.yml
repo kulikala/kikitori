@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Test
+        run: uv run --python 3.12 --extra cpu --group dev pytest -q
+      - name: Check that the tag matches __version__
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/kikitori/__init__.py)
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME does not match __version__ $version"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Build
+        run: uv build --out-dir dist
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then echo "CHANGELOG.md has no section for $VERSION"; exit 1; fi
+      - name: Point the install scripts at this wheel
+        run: |
+          wheel="kikitori-$VERSION-py3-none-any.whl"
+          [ -f "dist/$wheel" ] || { echo "dist/$wheel not found"; exit 1; }
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$wheel"
+          sed "s|__WHEEL_URL__|$url|" install.sh > dist/install.sh
+          sed "s|__WHEEL_URL__|$url|" install.ps1 > dist/install.ps1
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "kikitori $VERSION" --notes-file notes.md dist/*
