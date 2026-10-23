@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-23
+
 ### Fixed
 
 - Windows on ARM で導入が止まらないようにした。CPU 版の onnxruntime を入れ、補正は入れない（補正が使う部品に ARM 版 Windows 用の配布物が無い）。辞書の置換（`--dict`）に使う fugashi も入れず、`--dict` は案内を出して終わる。
