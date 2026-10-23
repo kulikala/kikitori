@@ -24,6 +24,9 @@ INSTALL = {"Darwin": ["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh
            "Windows": ["powershell", "-NoProfile", "-Command", "irm https://ollama.com/install.ps1 | iex"]}
 
 
+APP = Path("/Applications/Ollama.app")
+
+
 @dataclass
 class State:
     os: str  # Darwin / Linux / Windows
@@ -164,7 +167,7 @@ def gather(hardware_flag=None):
     s.models = (ollama.models() or {}) if v else {}
     if local:
         s.cli = shutil.which("ollama") is not None
-        s.app = osname == "Darwin" and Path("/Applications/Ollama.app").exists()
+        s.app = osname == "Darwin" and APP.exists()
         s.systemd = osname == "Linux" and Path("/etc/systemd/system/ollama.service").exists()
         s.tools_missing = [t for t in TOOLS.get(osname, []) if not shutil.which(t)]
         s.tty = _tty()
@@ -197,9 +200,15 @@ def _confirm(total):
         return False
 
 
+def _installed(s):
+    """導入スクリプトの終了コードによらず、Ollama 本体が置かれたか。"""
+    return (s.os == "Darwin" and APP.exists()) or bool(shutil.which("ollama"))
+
+
 def _start(s):
-    if s.os == "Darwin" and Path("/Applications/Ollama.app").exists():
-        subprocess.run(["open", "-a", "Ollama", "--args", "hidden"], check=False)
+    if s.os == "Darwin" and APP.exists():
+        # 入れた直後は名前（open -a）で引けないことがあるので、パスで開く
+        subprocess.run(["open", str(APP), "--args", "hidden"], check=False)
     else:
         exe = shutil.which("ollama") or "ollama"
         log = Path.home() / ".cache" / "kikitori" / "ollama.log"
@@ -243,7 +252,10 @@ def run_setup(s, steps, yes=False, dry_run=False):
         try:
             if x.kind == "install":
                 if subprocess.run(INSTALL[s.os]).returncode != 0:
-                    raise RuntimeError("公式の導入スクリプトが失敗しました")
+                    if not _installed(s):
+                        raise RuntimeError("公式の導入スクリプトが失敗しました")
+                    # macOS の公式スクリプトは、入れた直後の起動（open -a）で失敗することがある。起動は次の段で行う
+                    _say("公式の導入スクリプトは失敗を返しましたが、Ollama は入りました。起動に進みます")
             elif x.kind == "start":
                 if not ollama.version() and not _start(s):
                     raise RuntimeError("30 秒待っても Ollama が答えません（~/.cache/kikitori/ollama.log を見てください）")

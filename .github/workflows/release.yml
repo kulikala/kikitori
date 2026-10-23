@@ -36,7 +36,9 @@ jobs:
           [ -f "dist/$wheel" ] || { echo "dist/$wheel not found"; exit 1; }
           url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$wheel"
           sed "s|__WHEEL_URL__|$url|" install.sh > dist/install.sh
-          sed "s|__WHEEL_URL__|$url|" install.ps1 > dist/install.ps1
+          sed "s|__WHEEL_URL__|$url|" install-windows.ps1 > dist/install-windows.ps1
+          installer="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/install-windows.ps1"
+          sed "s|__INSTALLER_URL__|$installer|" install.ps1 > dist/install.ps1
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

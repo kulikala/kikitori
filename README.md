@@ -17,7 +17,7 @@ curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install
 ```
 
 ```powershell
-irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex            # Windows（実機では未検証）
+irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex            # Windows
 ```
 
 OS に合うほうの 1 行を打つと、導入スクリプトが次を順に行います。
@@ -43,6 +43,7 @@ OS に合うほうの 1 行を打つと、導入スクリプトが次を順に�
 - 更新: `KIKITORI_UPGRADE=1` を付けて導入の 1 行を打ち直します。
 - 取り外し: `uv tool uninstall kikitori`（Windows も同じ。`kikitori` と `kikitori-refine` の両方が消える）。モデルは別に消します。文字起こしのモデルは `~/.cache/kikitori/models` にあります。補正の認識モデルは `~/.cache/huggingface/hub` の `models--neosophie--Qwen3-ASR-1.7B-JA` と `models--sbintuitions--kana-whisper` です（同じフォルダにほかの道具のモデルもあるので、フォルダごとは消さない）。Ollama のモデルは[計算機とモデルの選び方](#計算機とモデルの選び方)の表の名前を `ollama rm qwen3.8:27b-mlx` のように指定して消せます。Ollama 本体と uv はほかの道具も使うので、導入スクリプトは消しません。消すときは、それぞれの説明に従ってください。
 - Intel の Mac には補正（torch）が入らないので、文字起こしだけが入ります。
+- Windows on ARM にも、文字起こしだけが入ります。DirectML 版の onnxruntime、補正が使う qwen-asr の依存（nagisa の dynet38）、辞書の置換（`--dict`）が使う fugashi に、ARM 版 Windows 用の配布物が無いためです。`--dict` を付けると、案内を出して終わります。
 
 ## 使い方
 
@@ -148,7 +149,7 @@ fix 列の tev1 は決められた選択肢から 1 つを選ぶ判定用の小�
 |---|---|---|---|
 | Apple Silicon（`apple`） | macOS で `sysctl hw.optional.arm64` が 1。Intel 用の Python を Apple Silicon で動かしている場合も Apple Silicon と判定する | `qwen3.8:27b-mlx`（18GB） | `tev1:0.8b-mxfp8`（0.8GB） |
 | NVIDIA（`nvidia`） | `nvidia-smi` が答える | `qwen3.8:27b-q4_K_M`（18GB） | `tev1:0.8b-q8_0`（0.8GB） |
-| それ以外（`cpu`。CPU だけ、AMD・Intel の GPU、Windows on ARM） | Apple Silicon でも NVIDIA でもない | 使わない | `tev1:0.8b-q8_0`（0.8GB） |
+| それ以外（`cpu`。CPU だけ、AMD・Intel の GPU） | Apple Silicon でも NVIDIA でもない | 使わない | `tev1:0.8b-q8_0`（0.8GB） |
 
 Intel の Mac は「それ以外」にあたりますが、補正そのものが入らないので、この表のモデルは使いません。
 
@@ -157,6 +158,8 @@ Intel の Mac は「それ以外」にあたりますが、補正そのものが
 - それ以外の機器で 27B を使わないのは、CPU で回すと 1 区間に数十秒以上かかると見込むためです（測っていません）。
 - 補正の精度を測ったのは、Apple Silicon の MLX 版だけです。GGUF 版（`q4_K_M`・`q8_0`）、NVIDIA、Windows での精度と速さは測っていません。
 - Linux（arm64、CPU だけ）では、Docker の Ubuntu 24.04 で、導入の 1 行から補正（`tev1:0.8b-q8_0` での用語の置き換え）までが通ることを確かめました。64 秒の合成音声の補正に 260 秒かかりました（B と K の認識を CPU で行うため）。
+- macOS（Apple Silicon の仮想マシン、macOS 26、メモリ 24GB、Ollama の無い状態から）では、導入スクリプトで Ollama と `tev1:0.8b-mxfp8` を入れ、補正（用語の置き換え）までが通ることを確かめました。仮想マシンの GPU では torch の MPS が動かないため、B と K の認識は CPU に替えて試し、64 秒の合成音声に 92 秒かかりました。
+- Windows 11 on ARM（仮想マシン、メモリ 8GB）では、導入の 1 行から文字起こしまでが通ることを確かめました。64 秒の合成音声に 50 秒かかりました（CPU）。x64 の Windows と DirectML は確かめていません。
 - Ollama は 0.40.0 以上が要ります（tev1 の選択に使う `/v1/systemone` が 0.40.0 からのため）。`--setup` は古い版を見つけると止まり、更新の仕方を出します。勝手に更新はしません。
 - 判定は `--hardware apple|nvidia|cpu` か環境変数 `KIKITORI_HARDWARE` で上書きできます。向き先の Ollama が別の PC にあるとき、`--setup` はその PC の機器を知らないので、指定が無ければ「それ以外」として扱います。
 - `kikitori-refine --setup --dry-run` で、何を入れるかを入れずに確かめられます。2 回目以降の `kikitori-refine --setup` は既にあるものを入れ直しません。
@@ -211,7 +214,7 @@ provider が黙って CPU に戻る場合は、起動時に例外にして、GPU
 | AMD の iGPU | 上の DirectML / MIGraphX | 実装のみ（実機で未検証） |
 | Vulkan、MLX | — | 未対応 |
 
-導入スクリプトは、Linux で NVIDIA の GPU があれば CUDA 版、無ければ CPU 版の onnxruntime を、Windows では DirectML 版を入れます。
+導入スクリプトは、Linux で NVIDIA の GPU があれば CUDA 版、無ければ CPU 版の onnxruntime を、Windows では DirectML 版（Windows on ARM では CPU 版）を入れます。
 話者分離（segmentation と埋め込み）は CPU で動きます。処理時間の大半を占めます（64 秒の会議で、話者分離 4.2 秒、それ以外 1.9 秒）。
 
 ## 精度
@@ -245,12 +248,13 @@ ReazonSpeech は学習データが同系統のため、このデータは kikito
 
 ## リリースで配るもの
 
-GitHub の Release ごとに、次の 4 つを載せます。
+GitHub の Release ごとに、次の 5 つを載せます。
 
 - `kikitori-<版>-py3-none-any.whl`：kikitori のコード（モデルは含まない。モデルと依存は、それぞれのライセンスで別に取得される）
 - `kikitori-<版>.tar.gz`：ソース
 - `install.sh`：macOS・Linux 用の導入スクリプト。その Release の wheel を入れる
-- `install.ps1`：Windows 用の導入スクリプト。その Release の wheel を入れる
+- `install.ps1`：Windows 用の導入の入口。ASCII だけで書いてあり、`install-windows.ps1` を取得して UTF-8 として読み、実行する（Windows PowerShell 5.1 の `irm` は、日本語を含むスクリプトを UTF-8 として読まないため）
+- `install-windows.ps1`：Windows 用の導入スクリプトの本体。その Release の wheel を入れる
 
 変更点は [CHANGELOG.md](CHANGELOG.md) にあります。
 

@@ -43,10 +43,10 @@ git push origin main v0.3.0
 2. タグと `__version__` が一致することを確かめる。
 3. wheel と sdist を作る。
 4. `CHANGELOG.md` から、その版の節を取り出して Release の本文にする（節が無ければ失敗する）。
-5. `install.sh`・`install.ps1` の `__WHEEL_URL__` を、その版の wheel の URL に置き換える。
-6. GitHub Release を作り、wheel・sdist・install.sh・install.ps1 を載せる。
+5. `install.sh`・`install-windows.ps1` の `__WHEEL_URL__` を、その版の wheel の URL に置き換え、`install.ps1` の `__INSTALLER_URL__` を、その版の `install-windows.ps1` の URL に置き換える。
+6. GitHub Release を作り、wheel・sdist・install.sh・install.ps1・install-windows.ps1 を載せる。
 
-`releases/latest/download/install.sh` は、最新の Release の install.sh を指します。手元のリポジトリの `install.sh`・`install.ps1` は `__WHEEL_URL__` のままで、そのままでは使えません（試すときは `KIKITORI_WHEEL` に wheel のパスを渡します）。
+`releases/latest/download/install.sh` は、最新の Release の install.sh を指します。手元のリポジトリの導入スクリプトは置き換える前の値のままで、そのままでは使えません。試すときは、`KIKITORI_WHEEL` に wheel のパスを渡します。Windows では、さらに `KIKITORI_INSTALLER` に `install-windows.ps1` のパスを渡し、`install.ps1` を実行します。
 
 公開したあと、`__version__` を次に出す予定の版の `.dev0` に上げ、`main` にコミットして push します。
 

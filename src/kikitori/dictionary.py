@@ -16,6 +16,15 @@ def norm(reading: str) -> str:
     return s.translate(_SMALL)
 
 
+def available():
+    """--dict に要る fugashi があるか（Windows on ARM には配布物が無い）。"""
+    try:
+        import fugashi  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def load(path):
     pairs = []
     for line in open(path, encoding="utf-8"):

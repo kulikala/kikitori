@@ -68,6 +68,10 @@ def main(argv=None):
     if a.setup or not a.input:
         print(f"モデルは {models} にあります", file=sys.stderr)
         return
+    if a.dict and not dictionary.available():
+        print("--dict には形態素解析の fugashi が要りますが、この環境にはありません"
+              "（Windows on ARM には fugashi の配布物がありません）", file=sys.stderr)
+        sys.exit(2)
     t0 = time.time()
     x = audio.load(a.input)
     make = lambda backend, p: engine.make_asr(models, p, a.threads, a.precision, a.model, backend)

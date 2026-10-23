@@ -120,3 +120,30 @@ def test_refine_rejects_non_japanese(capsys):
     with pytest.raises(SystemExit) as e:
         refine_main(["--model", "ja-en", "--plan"])
     assert e.value.code == 2 and "日本語" in capsys.readouterr().err
+
+
+def test_setup_continues_when_install_script_fails_after_installing(monkeypatch, tmp_path, capsys):
+    # macOS の公式スクリプトは、Ollama.app を置いたあとの起動（open -a）で失敗を返すことがある
+    from kikitori.refine import setup
+    app = tmp_path / "Ollama.app"
+    app.mkdir()
+    monkeypatch.setattr(setup, "APP", app)
+    monkeypatch.setattr(setup.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 1})())
+    up = []
+    monkeypatch.setattr(setup, "_start", lambda s: up.append(1) or True)
+    monkeypatch.setattr(setup.ollama, "version", lambda: (0, 40, 8) if up else None)
+    pulled = []
+    monkeypatch.setattr(setup.ollama, "pull", lambda m, say: pulled.append(m))
+    s = state(hardware=Hardware("apple", 24 * GB, "Apple Silicon"))
+    assert setup.run_setup(s, plan_setup(s, no_hf=True), yes=True) == 0
+    assert pulled == ["tev1:0.8b-mxfp8"]
+    assert "Ollama は入りました" in capsys.readouterr().err
+
+
+def test_setup_install_script_failure_without_ollama_fails(monkeypatch, tmp_path):
+    from kikitori.refine import setup
+    monkeypatch.setattr(setup, "APP", tmp_path / "missing.app")
+    monkeypatch.setattr(setup.shutil, "which", lambda name: None)
+    monkeypatch.setattr(setup.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 1})())
+    s = state()
+    assert setup.run_setup(s, plan_setup(s, no_hf=True), yes=True) == 1

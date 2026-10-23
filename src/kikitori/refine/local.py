@@ -2,8 +2,6 @@
 import re
 import sys
 
-import fugashi
-
 from . import ollama, prompts
 
 SEP = re.compile(r"[、。,.\s]")
@@ -41,6 +39,8 @@ _tagger = None
 def _tg():
     global _tagger
     if _tagger is None:
+        import fugashi  # Windows on ARM には無い。補正の中でだけ使う
+
         _tagger = fugashi.Tagger()
     return _tagger
 

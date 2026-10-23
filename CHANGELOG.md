@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows on ARM で導入が止まらないようにした。CPU 版の onnxruntime を入れ、補正は入れない（補正が使う部品に ARM 版 Windows 用の配布物が無い）。辞書の置換（`--dict`）に使う fugashi も入れず、`--dict` は案内を出して終わる。
+- Windows PowerShell 5.1 で `irm … | iex` したとき、導入スクリプトの日本語が化けないようにした。`install.ps1` は ASCII だけの入口になり、本体の `install-windows.ps1` を UTF-8 として読んで実行する。
+- Windows の導入スクリプトが、終わったあとに利用者の PowerShell を閉じないようにした。
+- macOS で、Ollama の公式の導入スクリプトが入れた直後の起動に失敗しても、`kikitori-refine --setup` が止まらず、Ollama を起動して続けるようにした。
+
 ## [0.2.0] - 2026-10-23
 
 最初の公開版です。

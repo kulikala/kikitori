@@ -45,7 +45,7 @@ def _candidates(f, role):
 def choose(f: Facts) -> Plan:
     if not f.evidence:
         return Plan("plain", notes=["Qwen3-ASR と kana-whisper を動かせないため、kikitori の本文のまま出します"
-                                    "（kikitori[refine] で入ります。Intel の Mac には入りません）"])
+                                    "（kikitori[refine] で入ります。Intel の Mac と Windows on ARM には入りません）"])
     if f.external != "off":
         return Plan("external")
     notes = []

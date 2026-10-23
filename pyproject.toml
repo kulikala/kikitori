@@ -8,7 +8,11 @@ license-files = ["LICENSE"]
 readme = "README.md"
 authors = [{ name = "Kazuyuki Namba" }]
 dependencies = [
-  "sherpa-onnx>=1.13", "sherpa-onnx-core>=1.13", "numpy", "fugashi", "unidic-lite", "kaldi-native-fbank",
+  "sherpa-onnx>=1.13", "sherpa-onnx-core>=1.13", "numpy",
+  # 辞書の置換（--dict）に使う。Windows on ARM には fugashi の配布物が無いので入れない
+  "fugashi; sys_platform != 'win32' or platform_machine != 'ARM64'",
+  "unidic-lite; sys_platform != 'win32' or platform_machine != 'ARM64'",
+  "kaldi-native-fbank",
   "onnxruntime; sys_platform == 'darwin'",
 ]
 

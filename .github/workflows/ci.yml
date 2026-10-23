@@ -33,9 +33,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Parse install.ps1
-        shell: pwsh
+      - name: Parse install.ps1 and install-windows.ps1 (Windows PowerShell 5.1)
+        shell: powershell
         run: |
-          $e = $null
-          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/install.ps1", [ref]$null, [ref]$e) | Out-Null
-          if ($e.Count) { $e | ForEach-Object { Write-Error $_.Message }; exit 1 }
+          $bad = 0
+          foreach ($f in "install.ps1", "install-windows.ps1") {
+            $e = $null
+            [System.Management.Automation.Language.Parser]::ParseFile("$PWD\$f", [ref]$null, [ref]$e) | Out-Null
+            if ($e.Count) { $e | ForEach-Object { Write-Host "${f}: $($_.Message)" }; $bad = 1 }
+          }
+          if ([Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes("$PWD\install.ps1")) -ne [IO.File]::ReadAllText("$PWD\install.ps1")) { Write-Host "install.ps1 must be ASCII only"; $bad = 1 }
+          exit $bad
