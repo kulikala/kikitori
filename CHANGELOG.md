@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- 設計の考え方の文書（`docs/DESIGN.md`）と、文書の書き方の文書（`docs/WRITING.md`）。
+
 ## [0.2.1] - 2026-10-23
 
 ### Fixed

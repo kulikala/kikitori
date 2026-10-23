@@ -17,6 +17,7 @@ Hugging Face のトークンは要りません。要約や整形は含みませ�
 ```bash
 curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | sh   # macOS・Linux
 curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | KIKITORI_NO_REFINE=1 sh   # 文字起こしだけ
+irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex   # Windows（PowerShell）
 ```
 
 入れたあと、補正の環境で何が足りないかは `kikitori-refine --setup --dry-run` で見られます。環境変数はパイプの先の `sh` に付けます。
@@ -44,25 +45,25 @@ kikitori --setup                                               # モデルだけ
 | `txt`（既定） | 細かい時刻が要らない。1 行 1 発言の `[分:秒] 話者N: 本文` |
 | `srt`・`vtt` | 字幕の道具に渡す。時刻の行と本文の行が分かれていて、発言ごとの対応を読み取りにくいので、LLM で読むときは使わない |
 
-yaml と json は、発言ごとに次の 4 つを持ちます。
+yaml と json は発言ごとに次の 4 つを持ちます。
 
 - `start`・`end`：秒
-- `speaker`：0 から数える話者番号（txt・srt・vtt の「話者1」が `0`）。人物名ではありません。名前との対応づけは、結果を読む側の仕事です。
+- `speaker`：0 から数える話者番号（txt・srt・vtt の「話者1」が `0`）。人物名ではありません。名前との対応づけは結果を読む側の仕事です。
 - `text`：本文。句読点は付きません。
 
 ## 精度を上げる
 
-- **`--num-speakers N`**：参加者の数が分かるなら必ず指定します。指定がないと、話者を分けすぎたりまとめすぎたりします。
+- **`--num-speakers N`**：参加者の数が分かるなら指定してください。分からなければ省けますが、指定がないと、話者を分けすぎたりまとめすぎたりします。
   指定の人数に分けられなかったときは、stderr に警告が出ます。
 - **`--dict`**：1 行 1 語、`表記<TAB>読み`（読みはひらがなでもカタカナでも可）。誤認識された固有名詞を、読みの一致で表記に直します。
-  読みが違う語は置き換わらないので、辞書は広めに書いてかまいません。モデルへの語彙の注入ではなく、後段の置換です。
-- **Zoom の「参加者ごとに個別のオーディオファイルを記録」**を使うと、話者分離が要らなくなり、いちばん正確です。
+  読みが違う語は置き換わらないので、辞書は広めに書いてかまいません。モデルへの語彙の注入ではなく、後段の置換です。ARM の Windows では使えません。
+- **Zoom の「参加者ごとに個別のオーディオファイルを記録」** を使うと、話者分離が要らなくなり、いちばん正確です。
   その場合はファイルごとに実行し、`start` の順に並べます。
 - **`--model ja-en`**：英語の発言が多い会議で試します。既定の `ja`（日本語専用）は、話されていない英語の語が紛れ込みにくい代わりに、英語を認識しません。
 
 ## 計算機の選び方
 
-`--device auto`（既定）は、実際の音声の先頭 8 秒で試走し、CPU より 10% 以上速いときだけ GPU を使います。
+`--device auto`（既定）は、実際の音声の先頭で試走し、GPU がはっきり速いときだけ GPU を使います。
 Apple Silicon では CoreML が CPU と同等かやや遅いため、CPU が選ばれます。これは正常です。
 GPU を指定して使えない場合は、理由を stderr に出して CPU に戻ります。
 
@@ -72,7 +73,7 @@ NVIDIA（CUDA）、Windows の DirectML、AMD の MIGraphX/ROCm は実装され�
 ## 本文を直す（kikitori-refine）
 
 `kikitori-refine` は、kikitori の本文（A）の誤変換・取りこぼしを直す別のコマンドです。発言の区切り（区間）ごとに、同じ音声を別の 2 つの認識
-（B: Qwen3-ASR、K: 音をカタカナで書く kana-whisper）でも文字にし、それを根拠に直します。導入の 1 行で入ります（Intel の Mac には入りません）。
+（B: Qwen3-ASR、K: 音をカタカナで書く kana-whisper）でも文字にし、それを根拠に直します。導入の 1 行で入ります（Intel の Mac と ARM の Windows には入りません）。
 
 ```bash
 kikitori-refine --plan --glossary 用語集.tsv                     # どの直し方になるかを stderr に出すだけ
@@ -88,14 +89,13 @@ kikitori-refine 会議.m4a --glossary 用語集.tsv --format json > 会議.json
 
 ### 呼び出し元の LLM（あなた）が直す
 
-あなたが直すと、本文があなたの動いている LLM のサービスへ渡ります。利用者がそれでよいと言っているときは、Ollama で直すより、あなたが直したほうが正確です
-（正解つき録音 1 本の文字誤り率（CER）で、Ollama の最良 21.6〜22.4% に対し、Haiku が直して 19.1〜20.4%。指示はこの録音で調整したもので、ほかの録音やほかの LLM で同じ差が出るとは限りません）。
+あなたが直すと、本文があなたの動いている LLM のサービスへ渡ります。利用者がそれでよいと言っているときは、Ollama で直すより、あなたが直したほうが正確になる見込みです。
 
 ```bash
 kikitori-refine 会議.m4a --glossary 用語集.tsv --external bundle --save-evidence 根拠.json > 束.json
 ```
 
-1. `束.json` の `system` を指示として読み、`chunks` の各 `user` に答えます。答えは、区間ごとに「`[番号] 本文`」の 1 行です。
+1. `束.json` の `system` を指示として読み、`chunks` の各 `user` に答えます。答えは区間ごとに「`[番号] 本文`」の 1 行です。
    要約・言い換え・敬語の整形をせず、指示に書かれた規則に従います。
 2. あなたの答えを `chunks` の順につないでファイルに書き、`kikitori-refine --apply 束.json --reply 答え.txt --format json` を打ちます。
    `--apply` は、答えの各行を `束.json` の区間に戻し、直した結果を出します。答えの無い区間は元の本文のまま残り、stderr に警告が出ます。
@@ -104,8 +104,8 @@ kikitori-refine 会議.m4a --glossary 用語集.tsv --external bundle --save-evi
 
 ## 結果を使うときの注意
 
-- 認識は完全ではありません。固有名詞・数字・同音異義語は、前後の文脈で確かめてください。
+- 認識は完全ではありません。固有名詞・数字・同音異義語は前後の文脈で確かめてください。
 - 重なった発言と、短い相づちは取りこぼします。
 - 朗読のような明瞭な音声では、Whisper large-v3-turbo のほうが正確なことがあります（FLEURS で CER 5.9% 対 5.2%）。
   自然な会話では kikitori が上回る傾向があります（放送音声で 7.1% 対 10.9%）が、会議音声そのものでの検証ではありません。
-- 1 時間の録音は、Apple Silicon で 6 分ほどかかります。先に `ffmpeg -t 300 -i 会議.m4a 先頭.m4a` で 5 分だけ切って試すと、設定を確かめられます。
+- 1 時間の録音は Apple Silicon で 6 分ほどかかります。先に `ffmpeg -t 300 -i 会議.m4a 先頭.m4a` で 5 分だけ切って試すと、設定を確かめられます。

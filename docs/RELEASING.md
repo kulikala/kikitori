@@ -1,7 +1,7 @@
 # リリースの手順
 
-kikitori の版は `src/kikitori/__init__.py` の `__version__` の 1 か所で決まります。`pyproject.toml` は、ビルドの道具 hatchling の設定でそこを読みます。
-リリースは 2 段に分かれます。手元で、版を上げたコミットとタグを作り、配る wheel（インストール用のパッケージ）と sdist（ソースの tar.gz）を試しに作って確かめる段（`scripts/release.py`）と、タグを GitHub に push して、GitHub Actions が Release を作る段です。
+kikitori の版は `src/kikitori/__init__.py` の `__version__` だけで決まります。
+リリースは 2 段です。手元で `scripts/release.py` を打って版を上げたコミットとタグを作り、タグを GitHub に push すると、GitHub Actions が Release を作ります。
 手順には `uv`・`git`・`gh`（GitHub の CLI）を使います。
 
 ## 版の付け方
@@ -12,6 +12,7 @@ kikitori の版は `src/kikitori/__init__.py` の `__version__` の 1 か所で�
 ## 1. 変更点を書く
 
 変更を入れるたびに、`CHANGELOG.md` の `## [Unreleased]` の下に書きためます。見出しは `### Added`・`### Changed`・`### Fixed`・`### Removed` を使います。
+文書の書き方は [WRITING.md](WRITING.md) に従います。
 
 ## 2. 手元でリリースのコミットとタグを作る
 
@@ -21,15 +22,9 @@ kikitori の版は `src/kikitori/__init__.py` の `__version__` の 1 か所で�
 uv run python scripts/release.py 0.3.0
 ```
 
-`release.py` は次を順に行います。どこかで失敗したら、書き換えた `__init__.py` と `CHANGELOG.md` を戻して止まります。
-
-1. 検査: 作業ツリーがきれい、`main` にいる、`main` の最初のコミット（親の無いコミット）のメッセージが `kikitori: public history root` である、タグがまだ無い、`[Unreleased]` に中身がある。最初のコミットの検査は、公開してはいけない古い履歴の上で誤ってリリースしないためのものです。公開リポジトリの最初のコミットを、このメッセージで作ってあります。
-2. `__version__` を新しい版にし、`CHANGELOG.md` の `[Unreleased]` の中身を `## [0.3.0] - 今日の日付` の節に移す。
-3. テスト（`pytest`）。
-4. 一時のフォルダに wheel と sdist を作る。
-5. 一時の場所に wheel を `uv tool install` し、`kikitori --version` と `kikitori-refine --version` が新しい版を返すことを確かめる。
-6. 公開前の検査（この文書の「公開前の検査」の節）を、履歴と wheel・sdist に走らせる。
-7. コミット `Release 0.3.0` とタグ `v0.3.0` を作る。push はしない。
+`release.py` は、版を書き換えて `[Unreleased]` を `## [0.3.0] - 今日の日付` の節に移し、テスト・wheel と sdist のビルド・試しの導入・公開前の検査を通してから、コミット `Release 0.3.0` とタグ `v0.3.0` を作ります。
+どこかで失敗したら、書き換えたファイルを戻して止まります。push はしません。
+`main` が公開用の履歴（最初のコミットが `kikitori: public history root`）でなければ、始める前に止まります。
 
 ## 3. 公開する
 
@@ -37,33 +32,24 @@ uv run python scripts/release.py 0.3.0
 git push origin main v0.3.0
 ```
 
-タグの push で `.github/workflows/release.yml` が動き、次を行います。
+タグの push で `.github/workflows/release.yml` が動きます。テストとタグの版の照合を通したあと、`CHANGELOG.md` のその版の節を本文にして GitHub Release を作り、wheel・sdist・install.sh・install.ps1・install-windows.ps1 を載せます。導入スクリプトには、このときその版の URL が書き込まれます。
 
-1. テスト。
-2. タグと `__version__` が一致することを確かめる。
-3. wheel と sdist を作る。
-4. `CHANGELOG.md` から、その版の節を取り出して Release の本文にする（節が無ければ失敗する）。
-5. `install.sh`・`install-windows.ps1` の `__WHEEL_URL__` を、その版の wheel の URL に置き換え、`install.ps1` の `__INSTALLER_URL__` を、その版の `install-windows.ps1` の URL に置き換える。
-6. GitHub Release を作り、wheel・sdist・install.sh・install.ps1・install-windows.ps1 を載せる。
-
-`releases/latest/download/install.sh` は、最新の Release の install.sh を指します。手元のリポジトリの導入スクリプトは置き換える前の値のままで、そのままでは使えません。試すときは、`KIKITORI_WHEEL` に wheel のパスを渡します。Windows では、さらに `KIKITORI_INSTALLER` に `install-windows.ps1` のパスを渡し、`install.ps1` を実行します。
+リポジトリの中の導入スクリプトは URL が書き込まれる前のままなので、そのままでは動きません。手元で試すときは、`KIKITORI_WHEEL` に wheel のパスを渡します。Windows では、さらに `KIKITORI_INSTALLER` に `install-windows.ps1` のパスを渡して、`install.ps1` を実行します。
 
 公開したあと、`__version__` を次に出す予定の版の `.dev0` に上げ、`main` にコミットして push します。
 
 ## 公開前の検査
 
-`scripts/check_public.py` は、公開するものに出してはいけない語（顧客名・取引先名・手元のパスの断片など）が無いかを調べます。
-語の一覧は、それ自体が出してはいけない語なので、リポジトリの外に置きます。
+`scripts/check_public.py` は、公開するものに出してはいけない語（扱った録音の顧客名・取引先名・人名、手元のフォルダのパスの断片など）が無いかを調べます。`release.py` も途中でこの検査を走らせます。
 
-- 一覧の場所: `~/.config/kikitori/public-denylist.txt`（環境変数 `KIKITORI_DENYLIST` で変更可）。1 行 1 語、`#` で始まる行は注記。一覧が無いと検査は失敗するので、リリースする人が自分の手元に作る。入れる語は、扱った録音の顧客名・取引先名・人名、手元のフォルダのパスの断片（ホームのフォルダ名など）。
-- 調べるもの: `main` の全コミットのファイルの中身・パス・コミットメッセージ・author と committer、タグのメッセージ、作業ツリーの git が管理するファイル、`--dist` で渡した wheel と sdist の中身。
+語の一覧は、それ自体が出してはいけない語なので、リポジトリの外に置きます。既定の場所は `~/.config/kikitori/public-denylist.txt`（環境変数 `KIKITORI_DENYLIST` で変更可）で、1 行 1 語、`#` で始まる行は注記です。一覧が無いと検査は失敗するので、リリースする人が自分の手元に作ります。
 
 ```bash
-uv run python scripts/check_public.py              # 履歴と作業ツリー
+uv run python scripts/check_public.py              # main の履歴と作業ツリー
 uv run python scripts/check_public.py --dist dist  # wheel と sdist も
 ```
 
-1 件でも見つかったら公開しません。見つかった語を直します。まだ push していないコミットに入っているなら、`git rebase` でそのコミットを直してから検査し直します。既に公開した履歴に入っているなら、下の「取り下げる」に従います。
+1 件でも見つかったら公開しません。まだ push していないコミットなら、`git rebase` で直してから検査し直します。既に公開した履歴に入っているなら、下の「取り下げる」に従います。
 
 ## 取り下げる
 
@@ -75,13 +61,12 @@ git push origin :refs/tags/v0.3.0         # GitHub のタグを消す
 git tag -d v0.3.0                         # 手元のタグを消す
 ```
 
-出してはいけないものを公開してしまったときは、リポジトリを非公開に戻します（`gh repo edit kulikala/kikitori --visibility private --accept-visibility-change-consequences`）。
-公開した内容は、取り下げる前に誰かが複製（clone やミラー、検索エンジンのキャッシュ）していることがあり、取り下げで消えるとは限りません。
+出してはいけないものを公開してしまったときは、`gh repo edit --visibility private --accept-visibility-change-consequences` でリポジトリを非公開に戻します。
+取り下げる前に誰かが複製（clone・ミラー・検索エンジンのキャッシュ）していることがあるので、取り下げても消えるとは限りません。
 
 ## モデルの表を更新する
 
-補正に使う Ollama のモデルは、`src/kikitori/refine/catalog.py` の `CATALOG`（機器ごとの候補）と `SIZES`（大きさ）で決まります。
-`kikitori-refine --setup`（取得するモデル）と、補正のときに直し方とモデルを選ぶ処理（`src/kikitori/refine/route.py`）は、どちらもこの表を読みます。
+補正に使う Ollama のモデルは `src/kikitori/refine/catalog.py` の `CATALOG`（機器ごとの候補）と `SIZES`（大きさ）で決まります。`kikitori-refine --setup` と補正の直し方の選択は、どちらもこの表を読みます。
 
 モデルを替えるときは、次を合わせて直します。
 
