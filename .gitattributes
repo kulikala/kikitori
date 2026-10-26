@@ -1,0 +1,6 @@
+# Test fixtures are compared byte for byte; keep them as committed on every checkout
+# (Windows checkouts would otherwise turn LF into CRLF).
+tests/fixtures/** -text
+crates/*/tests/fixtures/** -text
+# Shell scripts run under sh on Unix and must keep LF.
+*.sh text eol=lf
