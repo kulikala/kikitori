@@ -11,7 +11,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  SHERPA_ONNX_ARCHIVE_DIR: ${{ github.workspace }}/.sherpa-archive
 
 jobs:
   # Fast fail: refuse to build release binaries for a tag that does not name
@@ -39,13 +38,8 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
-      - name: Cache sherpa-onnx archives
-        uses: actions/cache@v4
-        with:
-          path: .sherpa-archive
-          key: sherpa-${{ runner.os }}-${{ runner.arch }}
       - name: Build, package and smoke test (metal + accelerate)
         run: ./scripts/build-release.sh aarch64-apple-darwin
       - uses: actions/upload-artifact@v4
@@ -59,13 +53,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
-      - name: Cache sherpa-onnx archives
-        uses: actions/cache@v4
-        with:
-          path: .sherpa-archive
-          key: sherpa-${{ runner.os }}-${{ runner.arch }}
       - name: Build, package and smoke test (CPU)
         run: ./scripts/build-release.sh x86_64-unknown-linux-gnu
       - name: Debian 12 start test (glibc requirement 2.34)
@@ -87,13 +76,8 @@ jobs:
     runs-on: ubuntu-22.04-arm
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
-      - name: Cache sherpa-onnx archives
-        uses: actions/cache@v4
-        with:
-          path: .sherpa-archive
-          key: sherpa-${{ runner.os }}-${{ runner.arch }}
       - name: Build, package and smoke test (CPU)
         run: ./scripts/build-release.sh aarch64-unknown-linux-gnu
       - name: Debian 12 (arm64) start test
@@ -125,7 +109,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates curl build-essential pkg-config cmake git jq
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.94.0
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - name: Build, package and smoke test (cuda asset, no GPU attached)
         run: ./scripts/build-release.sh x86_64-unknown-linux-gnu --cuda
@@ -149,9 +133,9 @@ jobs:
         run: |
           asset=$(find dist -name 'kikitori-*-cuda.tar.gz' | head -n 1)
           [ -n "$asset" ] || { echo 'cuda asset missing'; exit 1; }
-          docker run --rm -v "$PWD:/d" -w /d debian:12 sh -c '
+          docker run --rm -v "$PWD:/d" -w /d -e ASSET="$asset" debian:12 sh -c '
             set -eu
-            tar xzf d/kikitori-*-cuda.tar.gz -C /tmp
+            tar xzf "$ASSET" -C /tmp
             HOME=/tmp /tmp/kikitori --version
             HOME=/tmp /tmp/kikitori doctor --json >/dev/null
           '
@@ -161,13 +145,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
-      - name: Cache sherpa-onnx archives
-        uses: actions/cache@v4
-        with:
-          path: .sherpa-archive
-          key: sherpa-${{ runner.os }}-${{ runner.arch }}
       - name: Build, package and smoke test (CPU)
         shell: pwsh
         run: ./scripts/build-release.ps1 -Target x86_64-pc-windows-msvc
@@ -190,13 +169,8 @@ jobs:
         run: |
           $cuda = ./scripts/fetch-cuda-windows.ps1 -Dest "$env:RUNNER_TEMP\cuda"
           "CUDA_PATH=$cuda" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
-      - name: Cache sherpa-onnx archives
-        uses: actions/cache@v4
-        with:
-          path: .sherpa-archive
-          key: sherpa-${{ runner.os }}-${{ runner.arch }}
       - name: Build, package and smoke test (cuda asset, no GPU attached)
         shell: pwsh
         run: ./scripts/build-release.ps1 -Target x86_64-pc-windows-msvc -Cuda
@@ -234,13 +208,8 @@ jobs:
               '--add','Microsoft.VisualStudio.Component.VC.Llvm.Clang', `
               '--add','Microsoft.VisualStudio.Component.VC.Tools.ARM64'
           exit $proc.ExitCode
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
-      - name: Cache sherpa-onnx archives
-        uses: actions/cache@v4
-        with:
-          path: .sherpa-archive
-          key: sherpa-${{ runner.os }}-${{ runner.arch }}
       - name: Build, package and smoke test (CPU)
         shell: pwsh
         run: ./scripts/build-release.ps1 -Target aarch64-pc-windows-msvc

@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
@@ -33,16 +33,11 @@ jobs:
       RUSTFLAGS: ${{ contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Cache sherpa-onnx archives
-        uses: actions/cache@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
         with:
-          path: ${{ runner.temp }}/sherpa-archive
-          key: sherpa-${{ runner.os }}-${{ runner.arch }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
-        env:
-          SHERPA_ONNX_ARCHIVE_DIR: ${{ runner.temp }}/sherpa-archive
 
   test:
     runs-on: ${{ matrix.os }}
@@ -59,13 +54,18 @@ jobs:
       RUSTFLAGS: ${{ contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
-      - name: Cache sherpa-onnx archives
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/sherpa-archive
-          key: sherpa-${{ runner.os }}-${{ runner.arch }}
+      # rustup and cargo find their homes through HOME, so pin them to the
+      # real ones before the test step swaps HOME for a temp folder.
+      - name: Pin RUSTUP_HOME and CARGO_HOME
+        shell: bash
+        run: |
+          rustup_home=$(rustup show home)
+          cargo_home=${CARGO_HOME:-$HOME/.cargo}
+          if command -v cygpath >/dev/null; then cargo_home=$(cygpath -w "$cargo_home"); fi
+          echo "RUSTUP_HOME=$rustup_home" >> "$GITHUB_ENV"
+          echo "CARGO_HOME=$cargo_home" >> "$GITHUB_ENV"
       - name: Prepare a temp HOME (never the real one)
         shell: bash
         run: mkdir -p "${HOME}/.config" "${HOME}/.cache/huggingface" "${KIKITORI_MODELS}"
@@ -80,7 +80,6 @@ jobs:
         env:
           # Never touch the real HOME (COMMON.md).
           HOME: ${{ runner.temp }}/kikitori-home
-          SHERPA_ONNX_ARCHIVE_DIR: ${{ runner.temp }}/sherpa-archive
           XDG_CONFIG_HOME: ${{ runner.temp }}/kikitori-home/.config
           XDG_CACHE_HOME: ${{ runner.temp }}/kikitori-home/.cache
           HF_HOME: ${{ runner.temp }}/kikitori-home/.cache/huggingface

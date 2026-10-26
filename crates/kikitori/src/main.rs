@@ -271,6 +271,7 @@ enum SkillAction {
 }
 
 fn main() -> ProcessExitCode {
+    capture::release_pre_main();
     let mut args: Vec<String> = std::env::args().collect();
     let json_logs = args
         .windows(2)
@@ -300,6 +301,7 @@ fn main() -> ProcessExitCode {
         .to_owned();
     if invoked == "kikitori-refine" && !args.iter().skip(1).any(|a| a == "--version" || a == "-V") {
         log::configure(json_logs, false, false);
+        capture::replay_pre_main();
         log::warning("kikitori-refine は旧コマンド名です。`kikitori refine` を使用してください。");
         args.insert(1, "refine".to_owned());
     }
@@ -363,6 +365,7 @@ fn main() -> ProcessExitCode {
         }
         Err(error) => {
             log::configure(json_logs, false, false);
+            capture::replay_pre_main();
             let _ = error;
             log::error(
                 "usage",
@@ -378,6 +381,7 @@ fn main() -> ProcessExitCode {
         cli.global.quiet,
         cli.global.yes,
     );
+    capture::replay_pre_main();
     let is_transcribe = matches!(&cli.command, Command::Transcribe(_));
     let yes = cli.global.yes;
     let run = || match cli.command {

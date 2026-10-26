@@ -97,6 +97,8 @@ done
 
 FLAGS=
 [ -z "$FEATURES" ] || FLAGS="--features $(printf '%s' "$FEATURES" | tr ' ' ',')"
+# FLAGS holds several words on purpose.
+# shellcheck disable=SC2086
 cargo build --release --target "$TARGET" -p kikitori $FLAGS \
   || die "cargo build for $TARGET failed"
 

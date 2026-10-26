@@ -111,7 +111,10 @@ pub fn captured(line: &str) {
     if trimmed.is_empty() {
         return;
     }
-    let is_warning = trimmed.to_ascii_lowercase().contains("warn") || trimmed.starts_with("警告:");
+    // ONNX Runtime uses its generic kernels when it does not know the CPU vendor; nothing to act on.
+    let known_harmless = trimmed.starts_with("onnxruntime cpuid_info warning: Unknown CPU vendor");
+    let is_warning = !known_harmless
+        && (trimmed.to_ascii_lowercase().contains("warn") || trimmed.starts_with("警告:"));
     if !JSON.load(Ordering::Relaxed) && !VERBOSE.load(Ordering::Relaxed) && !is_warning {
         return;
     }

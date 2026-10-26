@@ -71,7 +71,7 @@ chmod +x "$TMP/kikitori"; "$TMP/kikitori" --version >/dev/null || die 'downloade
 
 # Python migration: inspect uv before replacing its symlink.
 if command -v uv >/dev/null 2>&1 && uv tool list 2>/dev/null | grep -q '^kikitori '; then
-  if [ "${KIKITORI_YES:-0}" != 1 ]; then [ -t 0 ] || die 'Python kikitori found in uv; rerun with KIKITORI_YES=1'; printf 'Remove Python kikitori from uv? [y/N] ' >&2; read answer; case "$answer" in y|Y|yes|YES) ;; *) die 'installation cancelled' ;; esac; fi
+  if [ "${KIKITORI_YES:-0}" != 1 ]; then [ -t 0 ] || die 'Python kikitori found in uv; rerun with KIKITORI_YES=1'; printf 'Remove Python kikitori from uv? [y/N] ' >&2; read -r answer; case "$answer" in y|Y|yes|YES) ;; *) die 'installation cancelled' ;; esac; fi
   uv tool uninstall kikitori || die 'uv tool uninstall failed'
 fi
 mkdir -p "$BIN_DIR" "$CONFIG"; DEST=$BIN_DIR/kikitori; OLD=$DEST.old
@@ -82,6 +82,8 @@ if ! "$DEST" --version >/dev/null 2>&1; then rm -f "$DEST"; [ ! -e "$OLD" ] || m
 if [ -e "$OLD" ]; then rm -f "$OLD"; fi
 case ":$PATH:" in *":$BIN_DIR:"*) :;; *)
   RC=${KIKITORI_SHELL_RC:-}; [ -n "$RC" ] || { SH_NAME=${SHELL:-sh}; case "${SH_NAME##*/}" in zsh) RC=$HOME_DIR/.zshrc;; bash) RC=$HOME_DIR/.bashrc;; *) RC=$HOME_DIR/.profile;; esac; }
+  # $PATH is written as-is so the shell expands it at login.
+  # shellcheck disable=SC2016
   if [ "${KIKITORI_NO_MODIFY_PATH:-0}" != 1 ]; then mkdir -p "$(dirname "$RC")"; printf '\nexport PATH="%s:$PATH" # added by kikitori\n' "$BIN_DIR" >> "$RC"; printf 'path-line\t%s\nbin\t%s\n' "$RC" "$DEST" >> "$RECEIPT"; fi;; esac
 ln -sf kikitori "$BIN_DIR/kikitori-refine"; printf 'bin\t%s\nvariant\t%s\n' "$BIN_DIR/kikitori-refine" "$CUDA" >> "$RECEIPT"
 printf 'bin\t%s\n' "$DEST" >> "$RECEIPT"

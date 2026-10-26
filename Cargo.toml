@@ -24,3 +24,8 @@ repository = "https://github.com/kulikala/kikitori"
 [patch.crates-io]
 # CUDA 版がドライバの無い PC でも起動するように、cudarc を動的に読み込む（vendor/README.md）
 candle-core = { path = "vendor/candle-core" }
+
+# gemm-f16 uses fp16 instructions in inline asm that only assemble when optimised
+# on aarch64 Linux, whose baseline CPU has no fp16; tests build without optimisation.
+[profile.dev.package.gemm-f16]
+opt-level = 3

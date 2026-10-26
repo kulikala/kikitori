@@ -79,7 +79,9 @@ gh release edit v0.3.0 --draft=false
 `dist/` に `kikitori-<版>-<target>[.tar.gz|.zip]` と `SHA256SUMS` ができます（Windows の資産は Windows 上で `build-release.ps1` を使う）。
 エンジンの実装が一部しか入っていない段階でビルドの経路と詰め方を確かめるときは、`KIKITORI_ALLOW_MISSING_FEATURES=1` で、指定した feature が `kikitori` クレートにまだ無くても除外して回します（正式なリリースでは渡さない）。
 
-sherpa-onnx-sys はビルドの最初で対応するアーカイブを `SHERPA_ONNX_ARCHIVE_DIR` に置き、次からはそこを使います。CI はこの置き場を cache します。
+sherpa-onnx-sys は、ビルドのたびに対応するアーカイブを sherpa-onnx の GitHub Release から取得します。`SHERPA_ONNX_ARCHIVE_DIR` を渡すと取得せず、そのフォルダにアーカイブが無ければビルドが止まるので、手元でも workflow でも渡しません。
+
+Rust は 1.94.0 を使います。workflow もこの版に固定してあり、手元の検査と同じ clippy で確かめます。
 
 ## CUDA 版を手元で作る
 

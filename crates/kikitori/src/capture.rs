@@ -139,6 +139,82 @@ pub fn capture_stderr<T>(f: impl FnOnce() -> T) -> T {
     result
 }
 
+/// Native libraries linked into kikitori can write to stderr from their static
+/// initializers, before `main` runs (ONNX Runtime warns about a CPU vendor it does
+/// not know, such as an Apple CPU under Linux). fd 2 is held on a pipe until `main`
+/// starts, so those lines go through the log like any other native output and the
+/// JSON log stays one event per line.
+#[cfg(target_os = "linux")]
+mod pre_main {
+    use std::sync::atomic::{AtomicI32, Ordering};
+
+    pub(super) static SAVED: AtomicI32 = AtomicI32::new(-1);
+    pub(super) static READ: AtomicI32 = AtomicI32::new(-1);
+
+    extern "C" fn hold() {
+        unsafe {
+            let mut pipe = [0; 2];
+            if libc::pipe2(pipe.as_mut_ptr(), libc::O_CLOEXEC) != 0 {
+                return;
+            }
+            // A full pipe makes the writes fail instead of blocking start-up.
+            libc::fcntl(pipe[1], libc::F_SETFL, libc::O_NONBLOCK);
+            let saved = libc::fcntl(2, libc::F_DUPFD_CLOEXEC, 3);
+            if saved < 0 || libc::dup2(pipe[1], 2) < 0 {
+                if saved >= 0 {
+                    libc::close(saved);
+                }
+                libc::close(pipe[0]);
+                libc::close(pipe[1]);
+                return;
+            }
+            libc::close(pipe[1]);
+            SAVED.store(saved, Ordering::Relaxed);
+            READ.store(pipe[0], Ordering::Relaxed);
+        }
+    }
+
+    // Entries in a numbered .init_array section run before the plain .init_array
+    // entries that C++ static constructors use.
+    #[used]
+    #[link_section = ".init_array.00101"]
+    static HOLD: extern "C" fn() = hold;
+}
+
+static PRE_MAIN_LINES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Put stderr back and keep what native code wrote to it before `main`.
+pub fn release_pre_main() {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        use std::os::fd::FromRawFd;
+        use std::sync::atomic::Ordering;
+        let saved = pre_main::SAVED.swap(-1, Ordering::Relaxed);
+        let read = pre_main::READ.swap(-1, Ordering::Relaxed);
+        if saved < 0 || read < 0 {
+            return;
+        }
+        // fd 2 held the only write end, so the read below ends once it is replaced.
+        libc::dup2(saved, 2);
+        libc::close(saved);
+        let mut bytes = Vec::new();
+        let _ = std::fs::File::from_raw_fd(read).read_to_end(&mut bytes);
+        let lines = String::from_utf8_lossy(&bytes)
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        *PRE_MAIN_LINES.lock().unwrap_or_else(|e| e.into_inner()) = lines;
+    }
+}
+
+/// Log the lines kept by `release_pre_main`, once the log format is set.
+pub fn replay_pre_main() {
+    let lines = std::mem::take(&mut *PRE_MAIN_LINES.lock().unwrap_or_else(|e| e.into_inner()));
+    for line in lines {
+        crate::log::captured(&line);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
