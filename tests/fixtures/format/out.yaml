@@ -1,0 +1,16 @@
+- start: 0.0
+  end: 3.52
+  speaker: 0
+  text: "では始めます"
+- start: 3.6
+  end: 65.123456
+  speaker: 1
+  text: "東京リージョンの \"負荷試験\" は\\n<b>&</b>"
+- start: 3599.9995
+  end: 3601.25
+  speaker: 2
+  text: "改行\u000aと\u2028区切り\u0009タブ"
+- start: 7.25
+  end: 7.5
+  speaker: 0
+  text: ""

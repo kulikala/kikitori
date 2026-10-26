@@ -10,3 +10,6 @@ plan/
 lab/
 .yomiyasu/
 uv.lock
+/target
+/.cargo-home
+.target-tmp-home/

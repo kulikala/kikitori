@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kikitori-core",
+    "crates/kikitori-audio",
+    "crates/kikitori-sherpa",
+    "crates/kikitori-knf-sys",
+    "crates/kikitori-reazon",
+    "crates/kikitori-qwen3asr",
+    "crates/kikitori-whisper",
+    "crates/kikitori-dict",
+    "crates/kikitori-refine",
+    "crates/kikitori-fetch",
+    "crates/kikitori",
+]
+
+[workspace.package]
+version = "0.3.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/kulikala/kikitori"
+
+
+[patch.crates-io]
+# CUDA 版がドライバの無い PC でも起動するように、cudarc を動的に読み込む（vendor/README.md）
+candle-core = { path = "vendor/candle-core" }

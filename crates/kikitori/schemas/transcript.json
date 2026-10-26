@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kikitori.example/schema/transcript/0.3.0",
+  "title": "Kikitori transcript",
+  "type": "array",
+  "items": { "$ref": "#/$defs/segment" },
+  "$defs": {
+    "segment": {
+      "type": "object", "required": ["start", "end", "speaker", "text"],
+      "properties": { "start": { "type": "number", "minimum": 0 }, "end": { "type": "number", "minimum": 0 }, "speaker": { "type": "integer", "minimum": 0 }, "text": { "type": "string" } },
+      "additionalProperties": false
+    }
+  }
+}

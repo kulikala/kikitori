@@ -1,5 +1,7 @@
 name: Release
 
+# Publish is manual: this workflow only creates a DRAFT release. A human
+# reviews the assets and publishes (docs/RELEASING.md).
 on:
   push:
     tags: ["v*"]
@@ -7,22 +9,23 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+  SHERPA_ONNX_ARCHIVE_DIR: ${{ github.workspace }}/.sherpa-archive
+
 jobs:
-  release:
+  # Fast fail: refuse to build release binaries for a tag that does not name
+  # the version under [workspace.package] in Cargo.toml.
+  tag-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - name: Test
-        run: uv run --python 3.12 --extra cpu --group dev pytest -q
-      - name: Check that the tag matches __version__
+      - name: The tag must match the workspace version
         run: |
-          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/kikitori/__init__.py)
-          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME does not match __version__ $version"; exit 1; }
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+          [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version"; exit 1; }
           echo "VERSION=$version" >> "$GITHUB_ENV"
-      - name: Build
-        run: uv build --out-dir dist
-      - name: Release notes from CHANGELOG.md
+      - name: CHANGELOG has a section for this version
         run: |
           awk -v v="$VERSION" '
             index($0, "## [" v "]") == 1 { on = 1; next }
@@ -30,16 +33,261 @@ jobs:
             on { print }
           ' CHANGELOG.md > notes.md
           if ! grep -q '[^[:space:]]' notes.md; then echo "CHANGELOG.md has no section for $VERSION"; exit 1; fi
-      - name: Point the install scripts at this wheel
+
+  build-macos-arm64:
+    needs: tag-check
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache sherpa-onnx archives
+        uses: actions/cache@v4
+        with:
+          path: .sherpa-archive
+          key: sherpa-${{ runner.os }}-${{ runner.arch }}
+      - name: Build, package and smoke test (metal + accelerate)
+        run: ./scripts/build-release.sh aarch64-apple-darwin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assets-macos-arm64
+          path: dist/*
+          if-no-files-found: error
+
+  build-linux-x64:
+    needs: tag-check
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache sherpa-onnx archives
+        uses: actions/cache@v4
+        with:
+          path: .sherpa-archive
+          key: sherpa-${{ runner.os }}-${{ runner.arch }}
+      - name: Build, package and smoke test (CPU)
+        run: ./scripts/build-release.sh x86_64-unknown-linux-gnu
+      - name: Debian 12 start test (glibc requirement 2.34)
         run: |
-          wheel="kikitori-$VERSION-py3-none-any.whl"
-          [ -f "dist/$wheel" ] || { echo "dist/$wheel not found"; exit 1; }
-          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$wheel"
-          sed "s|__WHEEL_URL__|$url|" install.sh > dist/install.sh
-          sed "s|__WHEEL_URL__|$url|" install-windows.ps1 > dist/install-windows.ps1
-          installer="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/install-windows.ps1"
-          sed "s|__INSTALLER_URL__|$installer|" install.ps1 > dist/install.ps1
-      - name: Create the GitHub Release
+          docker run --rm -v "$PWD/dist:/d" debian:12 sh -c '
+            set -eu
+            tar xzf /d/kikitori-*.tar.gz -C /tmp
+            HOME=/tmp /tmp/kikitori --version
+            HOME=/tmp /tmp/kikitori doctor --json >/dev/null
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assets-linux-x64
+          path: dist/*
+          if-no-files-found: error
+
+  build-linux-arm64:
+    needs: tag-check
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache sherpa-onnx archives
+        uses: actions/cache@v4
+        with:
+          path: .sherpa-archive
+          key: sherpa-${{ runner.os }}-${{ runner.arch }}
+      - name: Build, package and smoke test (CPU)
+        run: ./scripts/build-release.sh aarch64-unknown-linux-gnu
+      - name: Debian 12 (arm64) start test
+        run: |
+          docker run --rm -v "$PWD/dist:/d" debian:12 sh -c '
+            set -eu
+            tar xzf /d/kikitori-*.tar.gz -C /tmp
+            HOME=/tmp /tmp/kikitori --version
+            HOME=/tmp /tmp/kikitori doctor --json >/dev/null
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assets-linux-arm64
+          path: dist/*
+          if-no-files-found: error
+
+  # CUDA variant for Linux x86_64. The build needs the CUDA toolkit (kernels
+  # are compiled by nvcc); the binary itself loads libcuda at runtime, so the
+  # GPU-less container exercises the no-GPU start (fall back to CPU is left
+  # to a real transcribe run; --version and doctor must work without a GPU).
+  build-linux-x64-cuda:
+    needs: tag-check
+    runs-on: ubuntu-22.04
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain in the container
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl build-essential pkg-config cmake git jq
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build, package and smoke test (cuda asset, no GPU attached)
+        run: ./scripts/build-release.sh x86_64-unknown-linux-gnu --cuda
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assets-linux-x64-cuda
+          path: dist/*
+          if-no-files-found: error
+
+  # Docker is not reachable from inside a container job, so the Debian 12
+  # start test for the cuda asset runs here, on a plain runner.
+  debian-start-test-cuda-asset:
+    needs: build-linux-x64-cuda
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: assets-linux-x64-cuda
+          path: dist
+      - name: Debian 12 start test (cudarc must load libcuda lazily)
+        run: |
+          asset=$(find dist -name 'kikitori-*-cuda.tar.gz' | head -n 1)
+          [ -n "$asset" ] || { echo 'cuda asset missing'; exit 1; }
+          docker run --rm -v "$PWD:/d" -w /d debian:12 sh -c '
+            set -eu
+            tar xzf d/kikitori-*-cuda.tar.gz -C /tmp
+            HOME=/tmp /tmp/kikitori --version
+            HOME=/tmp /tmp/kikitori doctor --json >/dev/null
+          '
+
+  build-windows-x64:
+    needs: tag-check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache sherpa-onnx archives
+        uses: actions/cache@v4
+        with:
+          path: .sherpa-archive
+          key: sherpa-${{ runner.os }}-${{ runner.arch }}
+      - name: Build, package and smoke test (CPU)
+        shell: pwsh
+        run: ./scripts/build-release.ps1 -Target x86_64-pc-windows-msvc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assets-windows-x64
+          path: dist/*
+          if-no-files-found: error
+
+  # The same steps as the local build: NVIDIA's redistributable archives (nvcc,
+  # CCCL, static cudart) and the MSVC 14.44 toolset that nvcc 12.6 accepts,
+  # which VS 2022 on windows-2022 provides.
+  build-windows-x64-cuda:
+    needs: tag-check
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch nvcc, CCCL and cudart (CUDA 12.6.3)
+        shell: pwsh
+        run: |
+          $cuda = ./scripts/fetch-cuda-windows.ps1 -Dest "$env:RUNNER_TEMP\cuda"
+          "CUDA_PATH=$cuda" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache sherpa-onnx archives
+        uses: actions/cache@v4
+        with:
+          path: .sherpa-archive
+          key: sherpa-${{ runner.os }}-${{ runner.arch }}
+      - name: Build, package and smoke test (cuda asset, no GPU attached)
+        shell: pwsh
+        run: ./scripts/build-release.ps1 -Target x86_64-pc-windows-msvc -Cuda
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assets-windows-x64-cuda
+          path: dist/*
+          if-no-files-found: error
+
+  # sherpa-onnx's win-arm64 static archive references STL symbols that MSVC
+  # 14.44 (VS 2022) is missing, so VS 2026 (v18) Build Tools with the clang
+  # component are required. The runner image is checked with vswhere and
+  # installed on demand.
+  build-windows-arm64:
+    needs: tag-check
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure VS 2026 (v18) Build Tools with clang
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) {
+            $ver = & $vswhere -products * -latest -property installationVersion
+            if ($ver -match '^18\.') { Write-Host "VS $ver already present"; exit 0 }
+            Write-Host "vswhere reports $ver; installing VS 2026 Build Tools"
+          } else {
+            Write-Host 'Visual Studio Installer not found; installing VS 2026 Build Tools'
+          }
+          $boot = "$env:TEMP\vs_BuildTools.exe"
+          Invoke-WebRequest -UseBasicParsing 'https://aka.ms/vs/18/release/vs_BuildTools.exe' -OutFile $boot
+          $proc = Start-Process -Wait -PassThru -FilePath $boot `
+            -ArgumentList '--quiet','--wait','--norestart','--nocache', `
+              '--add','Microsoft.VisualStudio.Workload.VCTools','--includeRecommended', `
+              '--add','Microsoft.VisualStudio.Component.VC.Llvm.Clang', `
+              '--add','Microsoft.VisualStudio.Component.VC.Tools.ARM64'
+          exit $proc.ExitCode
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache sherpa-onnx archives
+        uses: actions/cache@v4
+        with:
+          path: .sherpa-archive
+          key: sherpa-${{ runner.os }}-${{ runner.arch }}
+      - name: Build, package and smoke test (CPU)
+        shell: pwsh
+        run: ./scripts/build-release.ps1 -Target aarch64-pc-windows-msvc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assets-windows-arm64
+          path: dist/*
+          if-no-files-found: error
+
+  draft-release:
+    needs:
+      - tag-check
+      - build-macos-arm64
+      - build-linux-x64
+      - build-linux-arm64
+      - build-linux-x64-cuda
+      - build-windows-x64
+      - build-windows-x64-cuda
+      - build-windows-arm64
+      - debian-start-test-cuda-asset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: assets-*
+          path: assets
+      - name: Assemble the asset directory and aggregate SHA256SUMS
+        run: |
+          mkdir release
+          find assets -name 'kikitori-*' -type f -exec cp -t release {} +
+          cat assets/*/SHA256SUMS | awk '!seen[$2]++' | sort -k2 > release/SHA256SUMS
+          cp install.sh install.ps1 release/
+          ls -la release
+      - name: Release notes from CHANGELOG.md
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+          [ "$GITHUB_REF_NAME" = "v$VERSION" ] || { echo "tag $GITHUB_REF_NAME does not match version $VERSION"; exit 1; }
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then echo "CHANGELOG.md has no section for $VERSION"; exit 1; fi
+      - name: Create a DRAFT release (never published automatically)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "kikitori $VERSION" --notes-file notes.md dist/*
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --title "kikitori ${GITHUB_REF_NAME#v}" --notes-file notes.md release/*
+          echo "Draft release created; review the assets and publish manually (docs/RELEASING.md)."

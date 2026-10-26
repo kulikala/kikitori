@@ -5,39 +5,105 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  test:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - { os: macos-14, target: aarch64-apple-darwin }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc }
+    env:
+      RUSTFLAGS: ${{ contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - name: Test (macOS)
-        if: runner.os == 'macOS'
-        run: uv run --python 3.12 --group dev pytest -q
-      - name: Test (Linux)
-        if: runner.os == 'Linux'
-        run: uv run --python 3.12 --extra cpu --group dev pytest -q
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache sherpa-onnx archives
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sherpa-archive
+          key: sherpa-${{ runner.os }}-${{ runner.arch }}
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+        env:
+          SHERPA_ONNX_ARCHIVE_DIR: ${{ runner.temp }}/sherpa-archive
+
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14, target: aarch64-apple-darwin }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc }
+    env:
+      RUSTFLAGS: ${{ contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache sherpa-onnx archives
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sherpa-archive
+          key: sherpa-${{ runner.os }}-${{ runner.arch }}
+      - name: Prepare a temp HOME (never the real one)
+        shell: bash
+        run: mkdir -p "${HOME}/.config" "${HOME}/.cache/huggingface" "${KIKITORI_MODELS}"
+        env:
+          HOME: ${{ runner.temp }}/kikitori-home
+          XDG_CONFIG_HOME: ${{ runner.temp }}/kikitori-home/.config
+          XDG_CACHE_HOME: ${{ runner.temp }}/kikitori-home/.cache
+          HF_HOME: ${{ runner.temp }}/kikitori-home/.cache/huggingface
+          KIKITORI_MODELS: ${{ runner.temp }}/kikitori-home/.cache/kikitori/models
+      - name: Test (model-dependent tests stay ignored)
+        run: cargo test --workspace
+        env:
+          # Never touch the real HOME (COMMON.md).
+          HOME: ${{ runner.temp }}/kikitori-home
+          SHERPA_ONNX_ARCHIVE_DIR: ${{ runner.temp }}/sherpa-archive
+          XDG_CONFIG_HOME: ${{ runner.temp }}/kikitori-home/.config
+          XDG_CACHE_HOME: ${{ runner.temp }}/kikitori-home/.cache
+          HF_HOME: ${{ runner.temp }}/kikitori-home/.cache/huggingface
+          KIKITORI_MODELS: ${{ runner.temp }}/kikitori-home/.cache/kikitori/models
 
   scripts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: shellcheck install.sh
-        run: shellcheck install.sh
+      - name: shellcheck build-release.sh and install.sh
+        run: shellcheck scripts/build-release.sh install.sh
+      - name: actionlint
+        run: docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:latest
 
-  windows-script:
+  windows-scripts:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Parse install.ps1 and install-windows.ps1 (Windows PowerShell 5.1)
+      - name: Parse build-release.ps1 and install.ps1 (Windows PowerShell 5.1)
         shell: powershell
         run: |
           $bad = 0
-          foreach ($f in "install.ps1", "install-windows.ps1") {
+          foreach ($f in "scripts\build-release.ps1", "install.ps1") {
             $e = $null
             [System.Management.Automation.Language.Parser]::ParseFile("$PWD\$f", [ref]$null, [ref]$e) | Out-Null
             if ($e.Count) { $e | ForEach-Object { Write-Host "${f}: $($_.Message)" }; $bad = 1 }

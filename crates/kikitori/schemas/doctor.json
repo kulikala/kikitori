@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kikitori.example/schema/doctor/0.3.0",
+  "title": "Kikitori doctor report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "os",
+    "arch",
+    "cpu",
+    "memory",
+    "candidates",
+    "ffmpeg",
+    "ollama",
+    "caches",
+    "path_kikitori",
+    "version",
+    "models",
+    "refine",
+    "selected"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "os": {
+      "type": "string"
+    },
+    "arch": {
+      "type": "string"
+    },
+    "cpu": {
+      "type": "string"
+    },
+    "memory": {
+      "type": "object",
+      "required": [
+        "total_bytes",
+        "available_bytes",
+        "refine_need_fp32_bytes",
+        "refine_need_fp16_bytes"
+      ],
+      "properties": {
+        "total_bytes": {
+          "type": "integer"
+        },
+        "available_bytes": {
+          "type": "integer"
+        },
+        "refine_need_fp32_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "refine_need_fp16_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "built",
+              "not built",
+              "unavailable"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "ffmpeg": {
+      "$ref": "#/$defs/tool"
+    },
+    "ollama": {
+      "type": "object",
+      "required": [
+        "present",
+        "models"
+      ],
+      "properties": {
+        "present": {
+          "type": "boolean"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "caches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "exists",
+          "size_bytes"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "size_bytes": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "path_kikitori": {
+      "type": "boolean"
+    },
+    "version": {
+      "type": "string"
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "role",
+          "present"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "refine": {
+      "type": "object",
+      "required": [
+        "route",
+        "model",
+        "notes"
+      ],
+      "properties": {
+        "route": {
+          "type": "string"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "selected": {
+      "type": "object",
+      "required": [
+        "transcribe",
+        "refine"
+      ],
+      "properties": {
+        "transcribe": {
+          "type": "string",
+          "enum": [
+            "cpu"
+          ]
+        },
+        "refine": {
+          "type": "string",
+          "enum": [
+            "cpu",
+            "metal",
+            "cuda"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "required": [
+        "present",
+        "version"
+      ],
+      "properties": {
+        "present": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

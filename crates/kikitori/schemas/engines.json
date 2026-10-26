@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kikitori.example/schema/engines/0.3.0",
+  "title": "Kikitori engines report",
+  "type": "object", "required": ["schema_version", "engines"],
+  "properties": { "schema_version": { "const": 1 }, "engines": { "type": "array", "items": { "type": "object" } } },
+  "additionalProperties": false
+}

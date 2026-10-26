@@ -1,0 +1,11 @@
+[package]
+name = "kikitori-sherpa"
+version.workspace = true
+description = "kikitori の sherpa-onnx を使うエンジン（Silero VAD、pyannote の話者分離、ReazonSpeech の greedy 認識）"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+kikitori-core = { version = "0.3.0", path = "../kikitori-core" }
+sherpa-onnx = { version = "=2.0.0", default-features = false, features = ["static"] }

@@ -1,0 +1,10 @@
+pub mod doctor;
+pub mod engines;
+pub mod models;
+pub mod refine;
+pub mod schema;
+pub mod setup;
+pub mod skill;
+pub mod transcribe;
+pub mod uninstall;
+pub mod update;

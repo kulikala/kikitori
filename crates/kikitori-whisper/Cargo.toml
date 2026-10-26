@@ -1,0 +1,30 @@
+[package]
+name = "kikitori-whisper"
+version.workspace = true
+description = "kikitori の kana-whisper エンジン（candle、元の safetensors をそのまま読む。CPU・Metal・CUDA）"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
+cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+accelerate = ["dep:accelerate-src", "candle/accelerate", "candle-nn/accelerate", "candle-transformers/accelerate"]
+debug = []
+
+[dependencies]
+kikitori-core = { version = "0.3.0", path = "../kikitori-core" }
+anyhow = "1"
+candle = { package = "candle-core", version = "0.11", default-features = false }
+candle-nn = { version = "0.11", default-features = false }
+candle-transformers = { version = "0.11", default-features = false }
+byteorder = "1"
+rand = "0.9"
+rustfft = "6"
+tokenizers = { version = "0.22", features = ["onig"] }
+serde_json = "1"
+tracing = "0.1"
+rayon = "1"
+matrixmultiply = "0.3"
+accelerate-src = { version = "0.3", optional = true }

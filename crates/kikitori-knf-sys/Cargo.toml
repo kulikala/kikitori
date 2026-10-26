@@ -1,0 +1,25 @@
+[package]
+name = "kikitori-knf-sys"
+version.workspace = true
+edition = "2021"
+build = "build.rs"
+include = [
+    "knfc",
+    "knf/kaldi-native-fbank/csrc",
+    "knf/kaldi-native-fbank/CMakeLists.txt",
+    "knf/cmake",
+    "knf/CMakeLists.txt",
+    "knf/LICENSE",
+    "src/*.rs",
+    "build.rs",
+]
+description = "kaldi-native-fbank の C API を、ほかの kaldi-native-fbank と衝突しない名前空間でビルドしたもの（knf-rs-sys 0.3.2 を元にした kikitori 用）"
+license = "MIT"
+repository.workspace = true
+
+[lib]
+name = "kikitori_knf_sys"
+path = "src/lib.rs"
+
+[build-dependencies.cmake]
+version = "0.1.50"

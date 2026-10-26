@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kikitori.example/schema/bundle/0.3.0",
+  "title": "Kikitori refine bundle",
+  "type": "object",
+  "required": ["kind", "how", "system", "chunks", "segments"],
+  "properties": {
+    "kind": { "const": "kikitori-refine/fixev" }, "how": { "type": "string" }, "system": { "type": "string" },
+    "chunks": { "type": "array", "items": { "type": "object", "required": ["ids", "user"], "properties": { "ids": { "type": "array", "items": { "type": "integer", "minimum": 0 } }, "user": { "type": "string" } }, "additionalProperties": false } },
+    "segments": { "type": "array", "items": { "type": "object", "required": ["start", "end", "speaker", "text", "b", "k"], "properties": { "start": { "type": "number" }, "end": { "type": "number" }, "speaker": { "type": "integer", "minimum": 0 }, "text": { "type": "string" }, "b": { "type": "string" }, "k": { "type": "string" } }, "additionalProperties": false } }
+  },
+  "additionalProperties": false
+}
