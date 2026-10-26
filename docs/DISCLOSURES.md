@@ -21,12 +21,12 @@ Ollama 本体の置き場、常駐のさせ方、Ollama の導入スクリプト
 ## 起動するプログラム
 
 - ffmpeg：Opus などの音声を読むとき。
-- Ollama：`kikitori refine --setup` が、Ollama が止まっていれば起動します。Mac では Ollama のアプリを開き、ほかの OS では `ollama serve` を起動します。Ollama が無ければ、公式の導入スクリプトを `sh`（Windows は PowerShell）で実行します。どちらも`kikitori refine --setup` の確認に含まれます。
+- Ollama：`kikitori refine --setup` が、Ollama が止まっていれば起動します。Mac では Ollama のアプリを開き、ほかの OS では `ollama serve` を起動します。Ollama が無ければ、公式の導入スクリプトを `sh`（Windows は PowerShell）で実行します。どちらも `kikitori refine --setup` の確認に含まれます。
 - `claude`：`--external claude` を付けたとき。
 - `nvidia-smi`：LLM のモデルを選ぶために、NVIDIA の GPU とメモリを調べるとき。
 - `sudo -n true`：Ollama の導入に管理者権限が要るかを確かめるとき（macOS・Linux）。パスワードは求めません。
 - `curl`・`shasum`（Windows は `certutil`）：`kikitori update` が新しい版を取得し、チェックサムを確かめるとき。
-- `uv`：導入スクリプトが`uv tool` で入れた Python 版を外すとき。
+- `uv`：導入スクリプトが `uv tool` で入れた Python 版を外すとき。
 
 ## 書き込むもの
 

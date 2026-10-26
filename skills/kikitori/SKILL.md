@@ -47,8 +47,8 @@ LLM や道具で読むときは `--format json-v1` を使います。`schema_ver
 `kikitori refine` は、文字起こしをやり直したうえで誤変換や取りこぼしを直します。手元の PC で直すとき、本文は外へ出ません。
 
 - 先に `kikitori refine --plan --glossary 用語集.tsv` で、どう直すか（直し方）と使うモデルを見ます。音声は要りません。直し方が利用者の望みに足りるか分からなければ、利用者に確かめます。
-- 本番は`--plan` を外し、`transcribe` と同じ `--num-speakers`・`--dict` を付けて打ちます。付けないと、話者番号や区間の数が `transcribe` の結果と食い違います。
-- 直し方はOllama の有無、PC のメモリ、入っているモデル、`--glossary` の有無で決まります。LLM を使えないとき（Ollama が答えない、モデルが無いなど）も失敗にはならず、LLM を使わない直し方（長さの規則）に切り替えて終了コード 0 で終わります。選んだ直し方と理由は stderr（`--log-format json` では `info`・`warning`）に出るので、理由とともに利用者に伝えます。
+- 本番は `--plan` を外し、`transcribe` と同じ `--num-speakers`・`--dict` を付けて打ちます。付けないと、話者番号や区間の数が `transcribe` の結果と食い違います。
+- 直し方は Ollama の有無、PC のメモリ、入っているモデル、`--glossary` の有無で決まります。LLM を使えないとき（Ollama が答えない、モデルが無いなど）も失敗にはならず、LLM を使わない直し方（長さの規則）に切り替えて終了コード 0 で終わります。選んだ直し方と理由は stderr（`--log-format json` では `info`・`warning`）に出るので、理由とともに利用者に伝えます。
 - 補正は日本語だけです。`--model ja-en` を付けると終了コード 2 で止まります。
 
 用語集の書き方、直し方の種類、モデルの選ばれ方、あなたが直す手順（`--external bundle`）、所要時間とメモリは [references/refine.md](references/refine.md) にあります。

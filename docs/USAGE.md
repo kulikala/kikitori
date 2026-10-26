@@ -67,7 +67,7 @@ kikitori は認識した語を形態素解析で読み、その読みが辞書�
 
 ## 補正（kikitori refine）
 
-`kikitori refine` は、文字起こしの誤りを直すコマンドです。音声を受け取って文字起こしからやり直し、話者が交代する位置などで区切った発言のひとまとまり（以下、区間）ごとに直します。区間はtxt の 1 行、json や yaml の 1 要素にあたります。`kikitori transcribe` の結果は補正の影響を受けません。
+`kikitori refine` は、文字起こしの誤りを直すコマンドです。音声を受け取って文字起こしからやり直し、話者が交代する位置などで区切った発言のひとまとまり（以下、区間）ごとに直します。区間は txt の 1 行、json や yaml の 1 要素にあたります。`kikitori transcribe` の結果は補正の影響を受けません。
 
 ```bash
 kikitori refine --plan --glossary 用語集.tsv                       # どの直し方になるかだけを見る（音声は要らない）
@@ -83,7 +83,7 @@ kikitori refine 会議.m4a --glossary 用語集.tsv --external claude   # claude
 | B | Qwen3-ASR 1.7B 日本語版（Hugging Face の `neosophie/Qwen3-ASR-1.7B-JA`） | 漢字かな交じりの文。A が落とした発話を拾う一方、話されていない文を作ることがある |
 | K | kana-whisper（Hugging Face の `sbintuitions/kana-whisper`） | 音をカタカナで書いたもの |
 
-`--glossary` で渡す用語集は1 行 1 語で `表記<TAB>補足` と書きます。補足（読みや説明）は省けます。会議に出る社名・地名・製品名を書くと、LLM がその表記に直します。辞書（`--dict`）が読みの一致で機械的に置き換えるのに対し、用語集は LLM が文脈を見て判断します。`kikitori refine` では両方を使えます。`--model` は `ja`（既定）だけで、`ja-en` を付けると終了コード 2 で止まります。
+`--glossary` で渡す用語集は 1 行 1 語で `表記<TAB>補足` と書きます。補足（読みや説明）は省けます。会議に出る社名・地名・製品名を書くと、LLM がその表記に直します。辞書（`--dict`）が読みの一致で機械的に置き換えるのに対し、用語集は LLM が文脈を見て判断します。`kikitori refine` では両方を使えます。`--model` は `ja`（既定）だけで、`ja-en` を付けると終了コード 2 で止まります。
 
 ### 直し方は環境で決まる
 
@@ -99,7 +99,7 @@ kikitori refine 会議.m4a --glossary 用語集.tsv --external claude   # claude
 | fix のモデルが Ollama にあり、`--glossary` を付けた | 長さの規則（次の行）で A か B を選んだあと、用語集の語に置き換えるかを fix のモデルに選ばせる | 24.6〜25.0% |
 | 上のどれにも当たらない（Ollama が答えない、`--glossary` が無いなど） | 長さの規則。B の文字数が A の 1.6 倍＋3 文字を超える区間だけ B を採り、A が落とした発話を補う | 24.8〜25.2% |
 
-- CER は5 分・1126 字の会議録音 1 本を Apple Silicon で測った値です。`--external claude` のモデルは Claude Haiku です。幅は同じ条件で 2〜3 回測った値の幅です。直し方どうしを同じ録音で比べるための値で、ほかの録音で同じ差が出るとは限りません。[MODELS.md](MODELS.md) の文字起こしの CER とは、データも採点の仕方も違うので比べられません。
+- CER は 5 分・1126 字の会議録音 1 本を Apple Silicon で測った値です。`--external claude` のモデルは Claude Haiku です。幅は同じ条件で 2〜3 回測った値の幅です。直し方どうしを同じ録音で比べるための値で、ほかの録音で同じ差が出るとは限りません。[MODELS.md](MODELS.md) の文字起こしの CER とは、データも採点の仕方も違うので比べられません。
 - 表の 1 行目は、`--external` より先に当たります。B・K が無いとき、`kikitori refine` は取得してよいかを尋ね、断ると文字起こしの本文のまま出します。端末が無ければ終了コード 6 で、`--offline` なら終了コード 5 で止まります。
 - 普段の `kikitori refine` は、Ollama が止まっていても Ollama を起動しません。長さの規則に切り替え、そのことを stderr に出して、終了コード 0 で終わります。Ollama を起動するのは `kikitori refine --setup` です。
 - Ollama の向き先は、環境変数 `KIKITORI_OLLAMA`、それが無ければ `OLLAMA_HOST`、どちらも無ければ `localhost:11434` です。

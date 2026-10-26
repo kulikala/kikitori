@@ -12,7 +12,7 @@ $ kikitori transcribe 定例会議.m4a --num-speakers 2
 
 - **手元の PC で完結します。** 文字起こしも補正も既定では手元の PC で動き、録音も文字も外へ送りません。モデルの取得にも、アカウントや API キーは要りません。
 - **1 本の実行ファイルで動きます。** 文字起こしに要るのは、実行ファイルとモデルだけです。Python などの実行環境は要りません。macOS（Apple Silicon）、Linux、Windows に対応します。
-- **誤りを直す補正があります。** `kikitori refine` は、同じ音声を別の 2 つの音声認識でも文字にし、手元の LLM（Ollama）と突き合わせて、誤変換や取りこぼしを直します。
+- **誤りを直す補正があります。** `kikitori refine` は、同じ音声を別の 2 つの音声認識でも文字にし、LLM と突き合わせて、誤変換や取りこぼしを直します。LLM は、手元の PC で動かす Ollama か、外部の LLM（`claude` コマンド、または kikitori を呼んだエージェント）を選べます。
 - **エージェントから使えます。** Claude Code・Codex 用のスキル、JSON の出力と診断ログ、失敗の種類ごとの終了コードがあります。
 
 ## 向いている使い方
@@ -48,7 +48,7 @@ curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install
 irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex            # Windows
 ```
 
-導入スクリプトは実行ファイルを置き（macOS・Linux は `~/.local/bin`、Windows は `%LOCALAPPDATA%\Programs\kikitori`）、PATH に足し、文字起こしのモデル（約 800MB）を取得し、補正の環境を用意します。補正の環境では、Ollama（手元で LLM を動かすソフト）が無ければ公式の導入スクリプトで入れ、補正に使うモデルを取得します。取得する量は、本体のメモリが 26GB 以上ある Apple Silicon の Mac と、GPU のメモリが 26GB 以上ある NVIDIA の GPU の PC で約 27GB、それ以外で約 8.5GB です。補正を動かすには、さらに 6〜10GB ほどの空きメモリが要ります。取得や導入の前には、何をするかと容量を出して確認を求めます。kikitori の導入に管理者権限は要りません。Ollama はkikitori を削除しても残ります。書き込むものの全部は [docs/DISCLOSURES.md](docs/DISCLOSURES.md) にあります。
+導入スクリプトは実行ファイルを置き（macOS・Linux は `~/.local/bin`、Windows は `%LOCALAPPDATA%\Programs\kikitori`）、PATH に足し、文字起こしのモデル（約 800MB）を取得し、補正の環境を用意します。補正の環境では、Ollama（手元で LLM を動かすソフト）が無ければ公式の導入スクリプトで入れ、補正に使うモデルを取得します。取得する量は、本体のメモリが 26GB 以上ある Apple Silicon の Mac と、GPU のメモリが 26GB 以上ある NVIDIA の GPU の PC で約 27GB、それ以外で約 8.5GB です。補正を動かすには、さらに 6〜10GB ほどの空きメモリが要ります。取得や導入の前には、何をするかと容量を出して確認を求めます。kikitori の導入に管理者権限は要りません。Ollama は kikitori を削除しても残ります。書き込むものの全部は [docs/DISCLOSURES.md](docs/DISCLOSURES.md) にあります。
 
 文字起こしだけを入れるなら、`KIKITORI_NO_REFINE=1` を付けます（`curl -fsSL …/install.sh | KIKITORI_NO_REFINE=1 sh`。Windows の付け方は [docs/INSTALL.md](docs/INSTALL.md#導入の環境変数)）。
 
@@ -74,14 +74,14 @@ kikitori transcribe 会議.m4a --dict 辞書.tsv --format vtt     # 固有名詞
 
 ## 補正
 
-`kikitori refine` は、文字起こしの誤りを直します。同じ音声を、文字起こしとは別の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）でも文字にし、手元の LLM（Ollama）にそれらを突き合わせさせて、本文を直します。用語集（`--glossary`）を渡すと、社名や製品名をその表記に直します。
+`kikitori refine` は、文字起こしの誤りを直します。同じ音声を、文字起こしとは別の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）でも文字にし、LLM にそれらを突き合わせさせて、本文を直します。LLM は、既定では手元の PC で動く Ollama を使い、指定すれば外部の LLM も使えます。用語集（`--glossary`）を渡すと、社名や製品名をその表記に直します。
 
 ```bash
 kikitori refine --plan --glossary 用語集.tsv        # どう直すかだけを見る
 kikitori refine 会議.m4a --glossary 用語集.tsv      # 直す
 ```
 
-どう直すかはPC のメモリと、入っているモデルで決まります。メモリの多い Apple Silicon の Mac や NVIDIA の GPU では大きな LLM が突き合わせ、それ以外の PC では軽い直し方になります。仕組み、直し方ごとの精度、外部の LLM（Claude）で直す方法は [docs/USAGE.md の補正](docs/USAGE.md#補正kikitori-refine) にあります。本文が PC の外へ出るのは、外部の LLM を指定したときと、Ollama を別の PC に向けたときだけです。
+どう直すかは PC のメモリと、入っているモデルで決まります。メモリの多い Apple Silicon の Mac や NVIDIA の GPU では大きな LLM が突き合わせ、それ以外の PC では軽い直し方になります。仕組み、直し方ごとの精度、外部の LLM（`claude` コマンドか、kikitori を呼んだエージェント）で直す方法は [docs/USAGE.md の補正](docs/USAGE.md#補正kikitori-refine) にあります。本文が PC の外へ出るのは、外部の LLM を指定したときと、Ollama を別の PC に向けたときだけです。
 
 ## エージェントから使う
 

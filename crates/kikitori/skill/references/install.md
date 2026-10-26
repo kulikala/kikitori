@@ -43,7 +43,7 @@ $env:KIKITORI_YES = "1"; irm https://github.com/kulikala/kikitori/releases/lates
 ```
 
 - kikitori の導入に管理者権限は要りません。Linux では、Ollama の導入に管理者権限が要り、終了コード 10 で止まることがあります。`hint` のコマンドを利用者が打ったら、`kikitori refine --setup --yes` を打ち直します。
-- 導入スクリプトは、途中の取得が止まっても終了コード 0 で終わり、「Note: kikitori setup stopped (exit 6) …」のように止まった手順と終了コードを出します。そのときは実行ファイルだけが入っています。済んだかは導入スクリプトの終了コードでは分からないので、入れたあとは `kikitori doctor` で確かめます。止まった手順は`kikitori --yes setup` と `kikitori refine --setup --yes` で打ち直せます。
+- 導入スクリプトは、途中の取得が止まっても終了コード 0 で終わり、「Note: kikitori setup stopped (exit 6) …」のように止まった手順と終了コードを出します。そのときは実行ファイルだけが入っています。済んだかは導入スクリプトの終了コードでは分からないので、入れたあとは `kikitori doctor` で確かめます。止まった手順は `kikitori --yes setup` と `kikitori refine --setup --yes` で打ち直せます。
 - 空きが足りないと終了コード 7 で止まり、空きと要る量が出ます。`kikitori setup` は約 1.6GB の空きを求めます。
 - 個別に取得するコマンドは、文字起こしのモデルが `kikitori setup`、B・K が `kikitori models pull --refine`、Ollama と LLM のモデルが `kikitori refine --setup` です。
 
