@@ -123,10 +123,10 @@ kikitori refine 会議.m4a --glossary 用語集.tsv --external claude   # claude
 
 ### 外部の LLM で直す
 
-`--external` を付けると、本文が PC の外へ出るか、呼び出し元に渡ります。手元の PC で動かす LLM は Ollama だけに対応しているので、Ollama 以外の LLM（LM Studio・llama.cpp・vLLM のような OpenAI 互換の API で動かすものを含む）で直すときも、この節の `--external bundle` を使います。
+`--external` を付けると、本文が PC の外へ出るか、呼び出し元に渡ります。手元の PC で動かす LLM は Ollama だけに対応していて、LM Studio・llama.cpp・vLLM のような OpenAI 互換の API で動かす LLM には、今はつなぐ手段がありません（対応は [issue #1](https://github.com/kulikala/kikitori/issues/1) に積んであります）。`--external bundle` は、kikitori を呼んだエージェントが自分で直すための形です。
 
 - `--external claude` は、`claude` コマンド（Claude Code の CLI）に、モデル Claude Haiku で直させます。利用料は、その `claude` コマンドにログインしているアカウントに付きます。
-- `--external bundle` は、LLM への指示（`system`）と問い（`chunks[].user`）をまとめた JSON（以下、束）を stdout に出します。kikitori を呼んだエージェントなど、呼び出し元の LLM が問いに答えます。答えの `[番号] 本文` の行（番号は束の `chunks[].ids` にある区間の番号）をつなぎ、`kikitori refine --apply 束.json --reply 答え.txt` に渡すと、直した結果が出ます。答えの無い区間は A のまま残り、stderr に警告が出ます。束の形は `kikitori schema bundle` で分かります。
+- `--external bundle` は、LLM への指示（`system`）と問い（`chunks[].user`）をまとめた JSON（以下、問いの JSON）を stdout に出します。kikitori を呼んだエージェントなど、呼び出し元の LLM が問いに答えます。答えの `[番号] 本文` の行（番号は問いの JSON の `chunks[].ids` にある区間の番号）をつなぎ、`kikitori refine --apply 問い.json --reply 答え.txt` に渡すと、直した結果が出ます。答えの無い区間は A のまま残り、stderr に警告が出ます。問いの JSON の形は `kikitori schema bundle` で分かります。
 
 `--save-evidence 根拠.json` で A・B・K の認識結果を保存しておくと、次からは `--evidence 根拠.json` で認識を省き、直し方だけを替えて試せます。
 

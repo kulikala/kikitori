@@ -99,7 +99,7 @@ kikitori transcribe 会議.m4a --dict 辞書.tsv --format vtt     # 固有名詞
 
 ## 補正
 
-`kikitori refine` は、文字起こしの誤りを直します。同じ音声を、文字起こしとは別の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）でも文字にし、LLM にそれらを突き合わせさせて、本文を直します。LLM は、既定では手元の PC で動く Ollama を使い、指定すれば外部の LLM も使えます。手元の PC で動かす LLM は Ollama だけに対応していて、LM Studio・llama.cpp・vLLM のような、OpenAI 互換の API で LLM を動かすソフトにはつなげません。そうしたソフトの LLM で直したいときは、`--external bundle` で問いを JSON に出し、その LLM に答えさせてから kikitori に戻します（[外部の LLM で直す](docs/USAGE.md#外部の-llm-で直す)）。kikitori は Ollama を入れも起動もしません。LLM で直すには、Ollama の案内（https://ollama.com）に従って自分で入れ、起動しておきます。Ollama が無ければ、LLM を使わない直し方になります。用語集（`--glossary`）を渡すと、社名や製品名をその表記に直します。
+`kikitori refine` は、文字起こしの誤りを直します。同じ音声を、文字起こしとは別の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）でも文字にし、LLM にそれらを突き合わせさせて、本文を直します。LLM は、既定では手元の PC で動く Ollama を使い、指定すれば外部の LLM も使えます。手元の PC で動かす LLM は Ollama だけに対応していて、LM Studio・llama.cpp・vLLM のような、OpenAI 互換の API で LLM を動かすソフトにはつなげません（対応は [issue #1](https://github.com/kulikala/kikitori/issues/1) に積んであります）。外部の LLM は、`claude` コマンドか、kikitori を呼んだエージェントです。kikitori は Ollama を入れも起動もしません。LLM で直すには、Ollama の案内（https://ollama.com）に従って自分で入れ、起動しておきます。Ollama が無ければ、LLM を使わない直し方になります。用語集（`--glossary`）を渡すと、社名や製品名をその表記に直します。
 
 ```bash
 kikitori refine --plan --glossary 用語集.tsv        # どう直すかだけを見る

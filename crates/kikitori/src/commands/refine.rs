@@ -564,7 +564,7 @@ pub(crate) fn run(
         return Err(CliError::new(
             ErrorKind::Refine,
             "--external claude には claude コマンド（Claude Code）が要りますが、見つかりません。".to_owned(),
-            "Claude Code を入れるか、--external bundle で束を作って呼び出し元の LLM に渡してください。",
+            "Claude Code を入れるか、--external bundle で問いの JSON を出し、呼び出し元の LLM に渡してください。",
         ));
     }
     let setup = engine_setup(args)?;

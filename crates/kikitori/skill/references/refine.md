@@ -24,7 +24,7 @@
 - 直し方が利用者の望みに足りないときは、利用者に Ollama を入れて起動してもらってから `kikitori refine --setup` でモデルを取得するか（取得なので了承が要る）、利用者が外部の LLM を使うと言っていれば `--external` に進めます。
 - `kikitori refine` は Ollama を起動しません。Ollama が止まっていれば長さの規則に切り替え、終了コード 0 で終わります。kikitori は Ollama を入れも起動もしないので、Ollama の起動は利用者に頼みます。
 - B・K が無いと取得の確認が出て、あなたの実行では終了コード 6 で止まります。了承を得て `--yes` を付けるか、先に `kikitori models pull --refine --yes` で取得します。
-- 手元の PC で動かす LLM は Ollama だけに対応しています。利用者が Ollama 以外の手元の LLM（LM Studio など）を使いたいと言ったら、kikitori から直接はつなげないので、`--external bundle` で問いを出し、その LLM の答えを `--apply` で戻します。
+- 手元の PC で動かす LLM は Ollama だけに対応しています。利用者が Ollama 以外の手元の LLM（LM Studio など）を使いたいと言ったら、kikitori からはつなげないと伝えます。
 - Ollama は 0.40.0 以上が要ります。古いと `kikitori refine --setup` は LLM のモデルを取得せず、更新の案内を出します。
 - 大きなモデルの名前は `--merge-model <名前>`（環境変数 `KIKITORI_LLM`）で替えられます。
 
@@ -33,11 +33,11 @@
 本文と用語集が、あなたの動いている LLM のサービスへ渡ります。利用者がそれでよいと言っているときだけ行います。Ollama で直すより正確になる見込みです。
 
 ```bash
-kikitori refine 会議.m4a --glossary 用語集.tsv --external bundle > 束.json
+kikitori refine 会議.m4a --glossary 用語集.tsv --external bundle > 問い.json
 ```
 
-1. `束.json` の `system` を指示として読み、`chunks` の各 `user` に答えます。答えは区間ごとに `[番号] 本文` の 1 行です。番号は `chunks[].ids` に従い（配列の添字ではありません）、行数と番号が `chunks[].ids` と一致することを確かめます。形は `kikitori schema bundle` で確かめられます。指示に書かれた規則に従い、要約・言い換え・敬語の整形はしません。
-2. 答えを `chunks` の順につないでファイルに書き、`kikitori refine --apply 束.json --reply 答え.txt --format json-v1` を打ちます。答えの無い区間は元の本文のまま残り、stderr に警告が出ます。
+1. `問い.json` の `system` を指示として読み、`chunks` の各 `user` に答えます。答えは区間ごとに `[番号] 本文` の 1 行です。番号は `chunks[].ids` に従い（配列の添字ではありません）、行数と番号が `chunks[].ids` と一致することを確かめます。形は `kikitori schema bundle` で確かめられます。指示に書かれた規則に従い、要約・言い換え・敬語の整形はしません。
+2. 答えを `chunks` の順につないでファイルに書き、`kikitori refine --apply 問い.json --reply 答え.txt --format json-v1` を打ちます。答えの無い区間は元の本文のまま残り、stderr に警告が出ます。
 
 `--external claude` を付けると、この 2 つの手順を `claude` コマンド（Claude Haiku）が行います。本文は Anthropic のサービスへ渡るので、利用者が外部の LLM を使うと言っているときだけ打ちます。
 
