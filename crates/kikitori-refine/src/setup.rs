@@ -238,8 +238,12 @@ fn os_name() -> (&'static str, bool) {
 }
 
 fn has_tty() -> bool {
-    let tty_path = if cfg!(windows) { "CON" } else { "/dev/tty" };
-    std::fs::File::open(tty_path).is_ok()
+    // Windows の CON は、標準入力がパイプでもコンソールがあれば開け、読むと入力を待ち続ける
+    if cfg!(windows) {
+        use std::io::IsTerminal;
+        return std::io::stdin().is_terminal();
+    }
+    std::fs::File::open("/dev/tty").is_ok()
 }
 
 /// `path`（無ければ、ある親）を含むディスクの空き。分からなければ None

@@ -175,10 +175,11 @@ pub fn confirm(yes: bool, prompt: &str) -> Result<bool, kikitori_core::CliError>
 }
 
 fn open_tty() -> Option<std::fs::File> {
-    std::fs::OpenOptions::new()
-        .read(true)
-        .open(if cfg!(windows) { "CONIN$" } else { "/dev/tty" })
-        .ok()
+    // Windows の CONIN$ は、標準入力がパイプでもコンソールがあれば開け、読むと入力を待ち続ける
+    if cfg!(windows) {
+        return None;
+    }
+    std::fs::OpenOptions::new().read(true).open("/dev/tty").ok()
 }
 
 fn read_line_from(r: &mut impl std::io::Read) -> String {
