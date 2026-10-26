@@ -8,7 +8,7 @@ kikitori は利用状況を送りません。アカウントも使いません�
 
 | 先 | 何のために | いつ |
 |---|---|---|
-| GitHub（`github.com/kulikala/kikitori` の Release、`api.github.com`） | 実行ファイルとチェックサムの取得、最新版の確認 | 導入、`kikitori update` |
+| GitHub（`github.com/kulikala/kikitori` の Release、`api.github.com`） | 実行ファイルとチェックサムの取得、最新版の確認 | インストール、`kikitori update` |
 | sherpa-onnx の GitHub Release | 文字起こしのモデルの取得 | `kikitori setup`、モデルが無いときの最初の文字起こし |
 | PyPI（`files.pythonhosted.org`） | 形態素解析の辞書 unidic-lite の取得 | `kikitori setup`、辞書が無いときの `--dict` |
 | Hugging Face | 補正の B・K の取得（認証なし） | `kikitori refine --setup`、B・K が無いときの `kikitori refine` |
@@ -23,7 +23,7 @@ kikitori は Ollama を入れも起動もせず、利用者が入れて動かし
 - `claude`：`--external claude` を付けたとき。
 - `nvidia-smi`：LLM のモデルを選ぶために、NVIDIA の GPU とメモリを調べるとき。
 - `curl`・`shasum`（Windows は `certutil`）：`kikitori update` が新しい版を取得し、チェックサムを確かめるとき。
-- `uv`：導入スクリプトが `uv tool` で入れた Python 版を外すとき。
+- `uv`：インストールスクリプトが `uv tool` で入れた Python 版を外すとき。
 
 ## 書き込むもの
 

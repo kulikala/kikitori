@@ -7,19 +7,19 @@
 
 ### Changed
 
-- `kikitori skill install` は、SKILL.md に加えて `references/` の手順書（導入・文字起こし・補正）も書く。SKILL.md には判断に要ることだけを残した。
+- `kikitori skill install` は、SKILL.md に加えて `references/` の手順書（インストール・文字起こし・補正）も書く。SKILL.md には判断に要ることだけを残した。
 - README を短い入口にし、細部を `docs/INSTALL.md`・`docs/USAGE.md`・`docs/DISCLOSURES.md`・`docs/MODELS.md` に分けた。
 
-- `kikitori refine --setup`（導入スクリプトの補正の段を含む）は、Ollama を入れも起動もしない。Ollama が無いか止まっているときは案内を出し、B・K だけを取得する。Ollama の入れ方と、入れるかどうかは利用者が決める。
+- `kikitori refine --setup`（インストールスクリプトの補正の段を含む）は、Ollama を入れも起動もしない。Ollama が無いか止まっているときは案内を出し、B・K だけを取得する。Ollama の入れ方と、入れるかどうかは利用者が決める。
 
 ### Fixed
 
 - `kikitori update` が、更新前の版の持つ古い SKILL.md を書き戻していた。置き換えた新しい版にスキルを書き直させる。0.3.0 から上げるときは、動くのが 0.3.0 の処理なのでスキルは古いまま残る。上げたあとで `kikitori skill install` を打ち直す。
-- macOS・Linux の導入スクリプトが、`uv tool` で入れた Python 版を外してよいかを標準入力に尋ねていたため、`curl … | sh` の形では答えられず止まっていた。kikitori 本体の確認と同じく端末（`/dev/tty`）に尋ねる。
+- macOS・Linux のインストールスクリプトが、`uv tool` で入れた Python 版を外してよいかを標準入力に尋ねていたため、`curl … | sh` の形では答えられず止まっていた。kikitori 本体の確認と同じく端末（`/dev/tty`）に尋ねる。
 
 ## [0.3.0] - 2026-10-26
 
-Python 版から Rust の 1 本の実行ファイルに置き換わりました。Python と uv は要りません。導入の 1 行（[README](README.md#導入)）は、Python 版 0.2.x が入っていれば外してから入れます。モデルは取り直しません。
+Python 版から Rust の 1 本の実行ファイルに置き換わりました。Python と uv は要りません。インストールの 1 行（[README](README.md#インストール)）は、Python 版 0.2.x が入っていれば外してから入れます。モデルは取り直しません。
 
 ### Python 版 0.2.x からの移行
 
@@ -33,7 +33,7 @@ Python 版から Rust の 1 本の実行ファイルに置き換わりました�
 | `--device coreml`・`directml`・`migraphx`・`rocm`・`sherpa` | `--device auto`・`cpu`・`metal`・`cuda`。旧い値は警告を出して読み替える（`coreml`・`directml`・`migraphx`・`rocm` は `auto`、`sherpa` は `cpu`）。旧い `--models DIR` は、値をそのまま使い（そこを置き場にする）、警告で環境変数 `KIKITORI_MODELS` を案内する |
 | 失敗の終了コードは 1 | 種類ごとに 2〜11（`kikitori --help` に一覧。使い方の誤りは 2） |
 | 入力なしの `kikitori` は 0 | 2 |
-| 更新は導入の 1 行に `KIKITORI_UPGRADE=1` | `kikitori update`（`KIKITORI_UPGRADE` は受け付けて無視する） |
+| 更新はインストールの 1 行に `KIKITORI_UPGRADE=1` | `kikitori update`（`KIKITORI_UPGRADE` は受け付けて無視する） |
 | 取り外しは `uv tool uninstall kikitori` と、モデルを手で削除 | `kikitori uninstall`（`--dry-run` で一覧、`--keep-models`） |
 | `KIKITORI_NO_HF=1` | `KIKITORI_NO_REFINE=1` と同じ扱い |
 | モデルの置き場 `~/.cache/kikitori/models` | そのまま |
@@ -64,12 +64,12 @@ Python 版から Rust の 1 本の実行ファイルに置き換わりました�
 - 処理が少し速くなり、メモリが減った。公開の合成音声と朗読音声をつないだ 67 分の会議を Apple Silicon の Mac の CPU で処理して、Python 版の 310.9 秒・3.53GB から 279.7 秒・3.05GB になった。
 - 発話区間の検出では見つからず、話者分離でだけ見つかった区間が、ほかの区間と重なったまま残る不具合を直した。直す前の動作（Python 版と同じ）は `--python-compat` で選べる。
 - 音声の読み込みが変わったため、本文と話者の割り当てが Python 版と完全には一致しない。上と同じ 67 分の会議で、Python 版の出力を正解とみなすと、本文の食い違い（句読点と空白を除いた文字誤り率）が 4.82%、話者の一致（話者番号の対応を最もよく取ったときに、一致する時間の割合）が 80.5% だった。正解の文章に対する文字誤り率は Python 版 11.26%、0.3.0 が 11.00% だった（句読点と空白を除いて採点）。
-- 導入は、`uv tool` 経由の Python 版から、Release の実行ファイルをチェックサムで照合して置く方式になった。管理者権限は要らない。
+- インストールは、`uv tool` 経由の Python 版から、Release の実行ファイルをチェックサムで照合して置く方式になった。管理者権限は要らない。
 
 ### Removed
 
-- Python 版（`uv tool` で入る kikitori）。導入の 1 行が外す。pip など別の方法で入れたものは、`pip uninstall kikitori` などで自分で外す。外さずに導入の 1 行を打つと、PATH で先に見つかる `kikitori` が新しいものでないとき、その場所を表示して終了コード 8 で終わる。
-- Intel の Mac 向けの実行ファイル。Intel の Mac で導入の 1 行を打つと「Intel Macs are not supported by kikitori 0.3; keep using 0.2.x」と出て止まる。0.2.x を使い続ける。
+- Python 版（`uv tool` で入る kikitori）。インストールの 1 行が外す。pip など別の方法で入れたものは、`pip uninstall kikitori` などで自分で外す。外さずにインストールの 1 行を打つと、PATH で先に見つかる `kikitori` が新しいものでないとき、その場所を表示して終了コード 8 で終わる。
+- Intel の Mac 向けの実行ファイル。Intel の Mac でインストールの 1 行を打つと「Intel Macs are not supported by kikitori 0.3; keep using 0.2.x」と出て止まる。0.2.x を使い続ける。
 - `KIKITORI_UPGRADE`（受け付けるが働かない）。
 - ONNX Runtime の GPU を使う文字起こし（CoreML・CUDA・DirectML・MIGraphX・ROCm）。
 
@@ -77,10 +77,10 @@ Python 版から Rust の 1 本の実行ファイルに置き換わりました�
 
 ### Fixed
 
-- Windows arm64 で導入が止まらないようにした。CPU 版の onnxruntime を入れ、補正は入れない（補正が使う部品に ARM 版 Windows 用の配布物が無い）。辞書の置換（`--dict`）に使う fugashi（形態素解析のライブラリ）も入れず、`--dict` は案内を出して終わる。
-- Windows PowerShell 5.1 で `irm … | iex` したとき、導入スクリプトの日本語が化けないようにした。`install.ps1` は ASCII だけの入口になり、本体の `install-windows.ps1` を UTF-8 として読んで実行する。
-- Windows の導入スクリプトが、終わったあとに利用者の PowerShell を閉じないようにした。
-- macOS で、Ollama の公式の導入スクリプトが入れた直後の起動に失敗しても、`kikitori-refine --setup` が止まらず、Ollama を起動して続けるようにした。
+- Windows arm64 でインストールが止まらないようにした。CPU 版の onnxruntime を入れ、補正は入れない（補正が使う部品に ARM 版 Windows 用の配布物が無い）。辞書の置換（`--dict`）に使う fugashi（形態素解析のライブラリ）も入れず、`--dict` は案内を出して終わる。
+- Windows PowerShell 5.1 で `irm … | iex` したとき、インストールスクリプトの日本語が化けないようにした。`install.ps1` は ASCII だけの入口になり、本体の `install-windows.ps1` を UTF-8 として読んで実行する。
+- Windows のインストールスクリプトが、終わったあとに利用者の PowerShell を閉じないようにした。
+- macOS で、Ollama の公式のインストールスクリプトが入れた直後の起動に失敗しても、`kikitori-refine --setup` が止まらず、Ollama を起動して続けるようにした。
 
 ## [0.2.0] - 2026-10-23
 

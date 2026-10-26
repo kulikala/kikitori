@@ -1,18 +1,18 @@
-# 導入・更新・削除
+# インストール・更新・削除
 
 kikitori を入れる、更新する、取り外すときの詳しい説明です。概要は [README](../README.md) にあります。
 
 ## 動く環境
 
-文字起こしはどの環境でも CPU で動きます。補正（`kikitori refine`）は、誤りを直す根拠にするため、同じ音声を文字起こしとは別の 2 つの音声認識モデルでも文字にします。この 2 つを B・K と呼びます。GPU を使うのは B・K だけです。補正の LLM は Ollama（手元で LLM を動かすソフト）が動かし、GPU の扱いも Ollama が決めます。Ollama は利用者が自分で入れます。GPU が無い PC でも、同じ使い方で全機能を使えます。
+文字起こしはどの環境でも CPU で動きます。補正（`kikitori refine`）は、誤りを直す根拠にするため、同じ音声を文字起こしとは別の 2 つの音声認識モデルでも文字にします。この 2 つを B・K と呼びます。GPU を使うのは B・K だけです。補正の LLM を手元の PC で動かすには、Ollama（手元で LLM を動かすソフト）が要ります。手元で動かす LLM は Ollama だけに対応しています。補正の LLM は Ollama が動かし、GPU の扱いも Ollama が決めます。Ollama は利用者が自分で入れます。GPU が無い PC でも、同じ使い方で全機能を使えます。
 
 この文書と `kikitori doctor` は認識モデルを動かす装置（CPU か GPU）を計算機と呼びます。計算機は `--device` で選び、値は `auto`（既定）・`cpu`・`metal`・`cuda` です。`auto` は、Mac では Metal、CUDA 版では使えれば CUDA、それ以外では CPU を選びます。CUDA 版は NVIDIA の GPU 向けの実行ファイルで、それ以外を通常版と呼びます。
 
 | OS | B・K を動かす計算機 | 確かめた範囲 |
 |---|---|---|
-| macOS（Apple Silicon） | Metal（Apple Silicon の GPU） | 導入、文字起こし、補正、削除 |
-| Linux arm64 | CPU | 導入、文字起こし、補正 |
-| Windows arm64 | CPU | 導入、文字起こし、削除 |
+| macOS（Apple Silicon） | Metal（Apple Silicon の GPU） | インストール、文字起こし、補正、削除 |
+| Linux arm64 | CPU | インストール、文字起こし、補正 |
+| Windows arm64 | CPU | インストール、文字起こし、削除 |
 | Linux x86_64 | CPU | 起動と文字起こし（arm64 の PC 上のエミュレーション） |
 | Windows x64 | CPU | 起動と文字起こし（arm64 の PC 上のエミュレーション） |
 | Linux x86_64・Windows x64 の CUDA 版 | CUDA（NVIDIA の GPU）。条件を満たさなければ CPU | ビルドと、GPU の無い PC で CPU に切り替わるまで。NVIDIA の GPU を積んだ PC では確かめていません |
@@ -23,7 +23,7 @@ Windows での補正と、x86_64 の実機での動作は確かめていませ�
 
 ### NVIDIA の GPU を使う
 
-NVIDIA の GPU がある PC でも、既定で入るのは通常版で、B・K は CPU で動きます。GPU を使うには、導入のときに `KIKITORI_VARIANT=cuda` を付けて CUDA 版を入れます。CUDA 版が GPU を使うには、次の 3 つがそろっている必要があります。どれかが欠けていれば、CUDA 版も CPU で動きます。
+NVIDIA の GPU がある PC でも、既定で入るのは通常版で、B・K は CPU で動きます。GPU を使うには、インストールのときに `KIKITORI_VARIANT=cuda` を付けて CUDA 版を入れます。CUDA 版が GPU を使うには、次の 3 つがそろっている必要があります。どれかが欠けていれば、CUDA 版も CPU で動きます。
 
 - compute capability 8.0 以上の GPU（GeForce RTX 30 系、A100 以降）。自分の GPU の値は `nvidia-smi --query-gpu=compute_cap --format=csv,noheader` で分かります（例 `8.6`）。
 - NVIDIA のドライバ。
@@ -35,17 +35,31 @@ CUDA 版を入れたあと、`kikitori doctor` の `cuda:` の行が「利用可
 
 m4a（AAC-LC、HE-AAC v1・v2）・mp4・mp3・wav・flac・ogg は、そのまま読めます。Google Meet の webm のような Opus の音声を読むには [ffmpeg](https://ffmpeg.org) が要ります。
 
-## 導入
+## インストール
+
+打つ 1 行は、使う PC と、開く端末で決まります。
+
+| 使う PC | 開く端末 | 打つ 1 行 |
+|---|---|---|
+| macOS（Apple Silicon） | ターミナル | `curl` で始まる 1 行 |
+| Linux（x86_64・arm64） | 端末（bash・zsh など） | `curl` で始まる 1 行 |
+| Windows（x64・arm64） | PowerShell（スタートメニューで「PowerShell」と探して開く） | `irm` で始まる 1 行 |
+
+macOS・Linux では、次の 1 行を打ちます。
 
 ```bash
-curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | sh     # macOS・Linux
+curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | sh
 ```
+
+Windows では、PowerShell で次の 1 行を打ちます。`irm` は PowerShell のコマンドなので、コマンドプロンプト（`cmd`）では動きません。Git Bash のような Windows 上の bash で `curl` の 1 行を打っても、対応していない環境として止まります。
 
 ```powershell
-irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex            # Windows
+irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex
 ```
 
-導入スクリプトは次の順に進みます。
+Intel の Mac には対応していません（[Intel の Mac](#intel-の-mac)）。
+
+インストールスクリプトは次の順に進みます。
 
 1. Python 版 0.2.x が `uv tool` で入っていれば、外してよいかを尋ねてから外します（[Python 版 0.2.x からの移行](#python-版-02x-からの移行)）。
 2. GitHub の Release から、自分の環境の実行ファイルを取得し、チェックサムを確かめて置きます。チェックサムも同じ Release から取るので、確かめられるのは取得の途中で壊れていないことです。置き場は、macOS・Linux が `~/.local/bin`、Windows が `%LOCALAPPDATA%\Programs\kikitori` です。置き場が PATH に無ければ、PATH に足します。同じ置き場に、Python 版の名前 `kikitori-refine` も置きます。0.3.x の間だけ、`kikitori refine` に転送する名前です。
@@ -56,7 +70,7 @@ irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | 
 
 手順 3 と 4 では、取得の前に、何を取得するかと容量を出して確認を求めます。すでに手元にあるモデルは取得し直しません。実行ファイルを入れたあとなら、`kikitori refine --setup --dry-run` で、何が入るかを入れずに見られます。
 
-手順 3 か 4 が止まっても、導入スクリプトは「Note: kikitori setup stopped (exit 6) …」のように止まった手順と終了コードを出し、終了コード 0 で終わります。実行ファイルは入っていて、止まった手順のあとは入っていません。止まる主な場面は次のとおりです。
+手順 3 か 4 が止まっても、インストールスクリプトは「Note: kikitori setup stopped (exit 6) …」のように止まった手順と終了コードを出し、終了コード 0 で終わります。実行ファイルは入っていて、止まった手順のあとは入っていません。止まる主な場面は次のとおりです。
 
 - 確認を断ったとき、または端末が無くて確認できないとき（終了コード 6。[端末の無い環境で入れる](#端末の無い環境で入れる)）。
 - ディスクの空きが足りないとき（終了コード 7）。`kikitori setup` は約 1.6GB の空きを、`kikitori refine --setup` は取得する B・K と LLM のモデルの分の空きを、取得の前に確かめ、空きと要る量を出します。
@@ -67,9 +81,22 @@ irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | 
 kikitori transcribe 会議.m4a --num-speakers 4
 ```
 
-### 導入の環境変数
+### インストールの環境変数
 
-環境変数はパイプの先の `sh` の前に付けます（`curl -fsSL …/install.sh | KIKITORI_NO_REFINE=1 sh`）。Windows では、先に `$env:KIKITORI_NO_REFINE = "1"` を打ってから導入の 1 行を打ちます。
+macOS・Linux では、環境変数をパイプの先の `sh` の前に付けます。
+
+```bash
+curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | KIKITORI_NO_REFINE=1 sh
+```
+
+Windows では、先に環境変数を設定してから、インストールの 1 行を打ちます。
+
+```powershell
+$env:KIKITORI_NO_REFINE = "1"
+irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex
+```
+
+設定できる環境変数は次のとおりです。
 
 | 環境変数 | 働き |
 |---|---|
@@ -84,13 +111,13 @@ kikitori transcribe 会議.m4a --num-speakers 4
 
 ### 端末の無い環境で入れる
 
-kikitori の確認は、標準入力ではなく端末に直接尋ねます（macOS・Linux は `/dev/tty`、Windows は `CON`）。導入スクリプトが Python 版を外してよいかを尋ねる問いも同じです。そのため、人が自分の端末で導入の 1 行を打てば、パイプで渡していても確認に答えられます。
+kikitori の確認は、標準入力ではなく端末に直接尋ねます（macOS・Linux は `/dev/tty`、Windows は `CON`）。インストールスクリプトが Python 版を外してよいかを尋ねる問いも同じです。そのため、人が自分の端末でインストールの 1 行を打てば、パイプで渡していても確認に答えられます。
 
-エージェントの実行、コンテナ、CI のように端末が無い環境では、確認を待たずに終了コード 6 で止まり、導入スクリプトは上のとおり終了コード 0 で終わります。端末の無い環境では、`KIKITORI_YES=1` を付けて導入の 1 行を打つか、あとから `kikitori --yes setup`（補正も使うなら続けて `kikitori refine --setup --yes`）を打ちます。導入が済んだかは、導入スクリプトの終了コードでは分からないので、`kikitori doctor` で確かめます。
+エージェントの実行、コンテナ、CI のように端末が無い環境では、確認を待たずに終了コード 6 で止まり、インストールスクリプトは上のとおり終了コード 0 で終わります。端末の無い環境では、`KIKITORI_YES=1` を付けてインストールの 1 行を打つか、あとから `kikitori --yes setup`（補正も使うなら続けて `kikitori refine --setup --yes`）を打ちます。インストールが済んだかは、インストールスクリプトの終了コードでは分からないので、`kikitori doctor` で確かめます。
 
 ### Intel の Mac
 
-Intel の Mac 向けの実行ファイルはなく、導入スクリプトは「Intel Macs are not supported by kikitori 0.3」と出して止まります。Intel の Mac では Python 版 0.2.x を使ってください。初めて入れるときは次の 1 行です。
+Intel の Mac 向けの実行ファイルはなく、インストールスクリプトは「Intel Macs are not supported by kikitori 0.3」と出して止まります。Intel の Mac では Python 版 0.2.x を使ってください。初めて入れるときは次の 1 行です。
 
 ```bash
 curl -fsSL https://github.com/kulikala/kikitori/releases/download/v0.2.1/install.sh | sh
@@ -103,7 +130,7 @@ kikitori update            # 最新版へ。モデルは取り直さない
 kikitori update --dry-run  # 何を更新するかを見るだけ
 ```
 
-`kikitori update` は、新しい版が起動しないときは元の版に戻して終わります。`kikitori skill install` で書いたスキルも、新しい版の内容に書き換えます。ただし 0.3.0 から更新したときは、スキルが 0.3.0 の内容のまま残るので、更新のあとで `kikitori skill install` を打ち直します。通常版と CUDA 版を替えるときは、`--variant cuda`（CUDA 版へ）か `--variant cpu`（通常版へ）を付けます。導入の 1 行を打ち直しても更新できます。
+`kikitori update` は、新しい版が起動しないときは元の版に戻して終わります。`kikitori skill install` で書いたスキルも、新しい版の内容に書き換えます。ただし 0.3.0 から更新したときは、スキルが 0.3.0 の内容のまま残るので、更新のあとで `kikitori skill install` を打ち直します。通常版と CUDA 版を替えるときは、`--variant cuda`（CUDA 版へ）か `--variant cpu`（通常版へ）を付けます。インストールの 1 行を打ち直しても更新できます。
 
 ## 削除
 
@@ -112,7 +139,7 @@ kikitori uninstall --dry-run   # 消すものと残すものを一覧にする�
 kikitori uninstall             # 一覧を出し、確認のうえで消す
 ```
 
-導入スクリプトと kikitori は、自分が置いたものを 1 行ずつファイルに書き留めます。このファイルを受け取り記録と呼び、場所は `~/.config/kikitori/receipt.txt`（Windows は `%APPDATA%\kikitori\receipt.txt`）です。`kikitori uninstall` は、受け取り記録と既定の置き場を見て消します。
+インストールスクリプトと kikitori は、自分が置いたものを 1 行ずつファイルに書き留めます。このファイルを受け取り記録と呼び、場所は `~/.config/kikitori/receipt.txt`（Windows は `%APPDATA%\kikitori\receipt.txt`）です。`kikitori uninstall` は、受け取り記録と既定の置き場を見て消します。
 
 消すもの:
 
@@ -132,9 +159,9 @@ kikitori uninstall             # 一覧を出し、確認のうえで消す
 
 ## Python 版 0.2.x からの移行
 
-pip など `uv tool` 以外の方法で入れた Python 版は、導入スクリプトが外しません。先に `pip uninstall kikitori` などで外します。外さないと、PATH で先に見つかる Python 版を表示して、導入スクリプトが終了コード 8 で止まります。
+pip など `uv tool` 以外の方法で入れた Python 版は、インストールスクリプトが外しません。先に `pip uninstall kikitori` などで外します。外さないと、PATH で先に見つかる Python 版を表示して、インストールスクリプトが終了コード 8 で止まります。
 
-Python 版を `uv tool` で入れてある PC では、導入の 1 行で入れ替えられます。導入スクリプトが Python 版を外してよいかを尋ね、外してから新しい実行ファイルを置きます。端末の無い環境では、`KIKITORI_YES=1` を付けて打ちます（`curl -fsSL …/install.sh | KIKITORI_YES=1 sh`）。文字起こしのモデルは置き場が同じなので、取り直しません。Python 版が取得した B・K も、Hugging Face のキャッシュにあるものをそのまま使います。
+Python 版を `uv tool` で入れてある PC では、インストールの 1 行で入れ替えられます。インストールスクリプトが Python 版を外してよいかを尋ね、外してから新しい実行ファイルを置きます。端末の無い環境では、`KIKITORI_YES=1` を付けて打ちます（`curl -fsSL …/install.sh | KIKITORI_YES=1 sh`）。文字起こしのモデルは置き場が同じなので、取り直しません。Python 版が取得した B・K も、Hugging Face のキャッシュにあるものをそのまま使います。
 
 主に変わるのは次の点です。全部の一覧は [CHANGELOG.md](../CHANGELOG.md) の移行の表にあります。
 

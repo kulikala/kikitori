@@ -56,7 +56,7 @@ Actions が終わると Draft の Release に次が揃っています（公開�
 | `kikitori-0.3.0-x86_64-unknown-linux-gnu-cuda.tar.gz` | Linux x86_64 の CUDA 版。cudarc が libcuda を実行時に読むので、GPU の無い機械でも起動する |
 | `kikitori-0.3.0-x86_64-pc-windows-msvc-cuda.zip` | Windows x64 の CUDA 版。同上 |
 | `SHA256SUMS` | 上のすべての SHA-256 |
-| `install.sh`・`install.ps1` | 導入スクリプト（このタグの資産を選ぶ。最新版の解決は `/releases/latest` の転送先に従う） |
+| `install.sh`・`install.ps1` | インストールスクリプト（このタグの資産を選ぶ。最新版の解決は `/releases/latest` の転送先に従う） |
 
 各資産は binary・LICENSE・README.md・THIRD-PARTY-NOTICES を含み、`scripts/build-release.sh`・`build-release.ps1` が解凍した直後に `--version` と `doctor --json` を解凍先の実行ファイルで通してから詰めます。THIRD-PARTY-NOTICES は依存関係のライセンス（cargo metadata）に、静的にリンクされる sherpa-onnx（Apache-2.0）とその中の ONNX Runtime（MIT）の注記を添えたものです。
 
@@ -105,7 +105,7 @@ $env:CUDA_PATH = ./scripts/fetch-cuda-windows.ps1
 sherpa-onnx の win-arm64 の静的アーカイブは、MSVC 14.44（VS 2022）に無い STL の記号（`__std_find_trivial_1` など）を参照するため、リンクに VS 2026（v18）の Build Tools が必要です。sherpa-onnx-sys のビルドスクリプトが `ring` を引き込むので、VS の clang の部品（Microsoft.VisualStudio.Component.VC.Llvm.Clang）も要ります。
 `release.yml` は `vswhere` で確認し、無ければ `aka.ms/vs/18/release/vs_BuildTools.exe` から静かにインストールします。手元でも同じ部品構成を入れてください。
 
-## 公開前に導入スクリプトを試す
+## 公開前にインストールスクリプトを試す
 
 資産が手元にあるうちに、`install.sh`・`install.ps1` をこのタグの資産に対して試せます。実行環境は `HOME`・`XDG_CONFIG_HOME`・`XDG_CACHE_HOME`・`HF_HOME`・`KIKITORI_MODELS` を一時ディレクトリに向け、資産と `SHA256SUMS` を集めたフォルダを `KIKITORI_BASE_URL` に渡します。
 
@@ -120,7 +120,7 @@ sh install.sh
 ```
 
 `KIKITORI_VERSION` を渡さなければ、フォルダの中で最も新しい資産を「latest」として選びます。
-導入の最後で `kikitori setup` が中核のモデルを取得するので、モデルを取らせたくない検証では `HF_HUB_OFFLINE=1` を渡します（その場合 setup はオフラインのふるまいになるため、モデルの取得まで見る試験には使えません）。Windows では同じ変数を出し、`install.ps1` を PowerShell で実行します。
+インストールの最後で `kikitori setup` が中核のモデルを取得するので、モデルを取らせたくない検証では `HF_HUB_OFFLINE=1` を渡します（その場合 setup はオフラインのふるまいになるため、モデルの取得まで見る試験には使えません）。Windows では同じ変数を出し、`install.ps1` を PowerShell で実行します。
 
 ## 取り下げる
 

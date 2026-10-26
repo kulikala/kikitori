@@ -63,7 +63,7 @@ kikitori は認識した語を形態素解析で読み、その読みが辞書�
 
 辞書は認識のあとで文字を置き換えるだけで、認識そのものは変えません。そのため、音そのものを聞き違えた誤り（「東京リージョン」が「東京水温」になるなど）は直りません。そうした誤りは補正の用語集（`kikitori refine --glossary`）で直せます。
 
-形態素解析の辞書（unidic-lite）は、導入の `kikitori setup` で取得されます。無いまま `--dict` を付けると、取得してよいかを尋ねます。
+形態素解析の辞書（unidic-lite）は、インストールの `kikitori setup` で取得されます。無いまま `--dict` を付けると、取得してよいかを尋ねます。
 
 ## 補正（kikitori refine）
 
@@ -123,7 +123,7 @@ kikitori refine 会議.m4a --glossary 用語集.tsv --external claude   # claude
 
 ### 外部の LLM で直す
 
-`--external` を付けると、本文が PC の外へ出るか、呼び出し元に渡ります。
+`--external` を付けると、本文が PC の外へ出るか、呼び出し元に渡ります。手元の PC で動かす LLM は Ollama だけに対応しているので、Ollama 以外の LLM（LM Studio・llama.cpp・vLLM のような OpenAI 互換の API で動かすものを含む）で直すときも、この節の `--external bundle` を使います。
 
 - `--external claude` は、`claude` コマンド（Claude Code の CLI）に、モデル Claude Haiku で直させます。利用料は、その `claude` コマンドにログインしているアカウントに付きます。
 - `--external bundle` は、LLM への指示（`system`）と問い（`chunks[].user`）をまとめた JSON（以下、束）を stdout に出します。kikitori を呼んだエージェントなど、呼び出し元の LLM が問いに答えます。答えの `[番号] 本文` の行（番号は束の `chunks[].ids` にある区間の番号）をつなぎ、`kikitori refine --apply 束.json --reply 答え.txt` に渡すと、直した結果が出ます。答えの無い区間は A のまま残り、stderr に警告が出ます。束の形は `kikitori schema bundle` で分かります。
@@ -153,7 +153,7 @@ Claude Code や Codex のような生成 AI のエージェントに kikitori �
 - **スキル。** `kikitori skill install` が、kikitori の使い方を書いた手順書（SKILL.md）をエージェントのスキルの置き場に書きます。書き込む前の確認はありません。既定は Claude Code（`~/.claude/skills/kikitori`）で、`--agent codex` なら Codex（`~/.codex/skills/kikitori`）です。置き場は `kikitori skill path` で分かり、`kikitori skill uninstall` で消せます。同じ手順書が、このリポジトリの `skills/kikitori/` にもあります。
 - **機械が読むログ。** `--log-format json`（環境変数 `KIKITORI_LOG_FORMAT`）を付けると、stderr が 1 行 1 件の JSON になります。各行の `type` は `progress`・`info`・`warning`・`error`・`summary` のどれかです。`error` の行は、`code`（下の表の名前）、`message`、`hint`（次に打つとよいコマンド）を持ちます。stdout には、選んだ形式の結果だけが出ます。
 - **JSON の形。** `kikitori schema <名前>` が JSON Schema を出します。名前は `transcript`（json・yaml の形）・`transcript-v1`（json-v1 の形）・`bundle`・`doctor`・`engines` です。
-- **確認。** モデルの取得、補正の環境の導入、削除、更新の前には確認が出ます。端末が無いときは答えを待たずに終了コード 6 で止まり、`--yes` を案内します。`--dry-run` で、何をするかと容量を先に見られます。
+- **確認。** モデルの取得、補正の環境のインストール、削除、更新の前には確認が出ます。端末が無いときは答えを待たずに終了コード 6 で止まり、`--yes` を案内します。`--dry-run` で、何をするかと容量を先に見られます。
 
 ### 終了コード
 
@@ -177,20 +177,20 @@ Claude Code や Codex のような生成 AI のエージェントに kikitori �
 
 | 起きたこと | どうするか |
 |---|---|
-| 導入の直後に `kikitori` が見つからない | 新しい端末を開きます。PATH の変更は、新しく開いた端末から効きます |
-| 導入スクリプトが「Note: kikitori setup stopped (exit …)」と出した | 実行ファイルだけが入り、モデルも補正の環境も入っていません。出た終了コードの行を下の表で見て対処し、`kikitori setup` を打ち直します。補正も使うなら、続けて `kikitori refine --setup` を打ちます（[導入](INSTALL.md#導入)） |
-| 導入スクリプトが「Note: kikitori refine --setup stopped (exit …)」と出した | 文字起こしは使えます。補正の環境が途中までです。出た終了コードの行を下の表で見て対処し、`kikitori refine --setup` を打ち直します |
-| 導入スクリプトが「another kikitori shadows the installed binary」と出して終了コード 8 で止まった | pip など `uv tool` 以外で入れた Python 版が、PATH で先に見つかっています。`pip uninstall kikitori` などで外してから、導入の 1 行を打ち直します |
-| 導入スクリプトが「Python kikitori found in uv; rerun with KIKITORI_YES=1」と出した | `uv tool` で入れた Python 版を外してよいかを尋ねたいのに、端末がありません（エージェントや CI での実行）。外してよければ `curl -fsSL …/install.sh \| KIKITORI_YES=1 sh` と打ち直します（[Python 版 0.2.x からの移行](INSTALL.md#python-版-02x-からの移行)） |
-| 導入スクリプトが「installation cancelled」と出した | Python 版を外す問いに「いいえ」と答えたので止まりました。外してよければ打ち直して「y」と答えます |
-| 導入スクリプトが「Intel Macs are not supported by kikitori 0.3」と出した | Intel の Mac では Python 版 0.2.x を使います（[Intel の Mac](INSTALL.md#intel-の-mac)） |
+| インストールの直後に `kikitori` が見つからない | 新しい端末を開きます。PATH の変更は、新しく開いた端末から効きます |
+| インストールスクリプトが「Note: kikitori setup stopped (exit …)」と出した | 実行ファイルだけが入り、モデルも補正の環境も入っていません。出た終了コードの行を下の表で見て対処し、`kikitori setup` を打ち直します。補正も使うなら、続けて `kikitori refine --setup` を打ちます（[インストール](INSTALL.md#インストール)） |
+| インストールスクリプトが「Note: kikitori refine --setup stopped (exit …)」と出した | 文字起こしは使えます。補正の環境が途中までです。出た終了コードの行を下の表で見て対処し、`kikitori refine --setup` を打ち直します |
+| インストールスクリプトが「another kikitori shadows the installed binary」と出して終了コード 8 で止まった | pip など `uv tool` 以外で入れた Python 版が、PATH で先に見つかっています。`pip uninstall kikitori` などで外してから、インストールの 1 行を打ち直します |
+| インストールスクリプトが「Python kikitori found in uv; rerun with KIKITORI_YES=1」と出した | `uv tool` で入れた Python 版を外してよいかを尋ねたいのに、端末がありません（エージェントや CI での実行）。外してよければ `curl -fsSL …/install.sh \| KIKITORI_YES=1 sh` と打ち直します（[Python 版 0.2.x からの移行](INSTALL.md#python-版-02x-からの移行)） |
+| インストールスクリプトが「installation cancelled」と出した | Python 版を外す問いに「いいえ」と答えたので止まりました。外してよければ打ち直して「y」と答えます |
+| インストールスクリプトが「Intel Macs are not supported by kikitori 0.3」と出した | Intel の Mac では Python 版 0.2.x を使います（[Intel の Mac](INSTALL.md#intel-の-mac)） |
 | 終了コード 2 で止まった | 旗や値の誤りです。`kikitori <コマンド> --help` で書き方を確かめます |
 | 終了コード 3 で止まった | 音声のファイルが無いか、読めない形式です。パスと形式（[読める音声](INSTALL.md#読める音声)）を確かめます |
 | 終了コード 4 で止まった | 音声が Opus なので ffmpeg が要ります。[ffmpeg](https://ffmpeg.org) を入れて打ち直します |
 | 終了コード 5 で止まった | `--offline` を外すか、ネットワークにつないで取得します。文字起こしのモデルは `kikitori setup`、補正の B・K は `kikitori models pull --refine` です |
 | 終了コード 6 で止まった | 確認が要ります。人が端末で打ち直すか、`--yes` を付けて打ち直します |
 | 終了コード 7 で止まった | ディスクの空きが足りないか、取得に失敗しました。空きは取得の前に確かめます。`kikitori setup` は約 1.6GB（取得する約 796MB の 2 倍）、`kikitori refine --setup` は B・K と LLM のモデルの分（最大約 26GB）を求めます。stderr に出る、空きと要る量を見て空きを作ります。通信の失敗なら、打ち直すと続きから取得します |
-| 終了コード 8 で止まった | 処理の途中で失敗しました。`-v` を付けて打ち直し、stderr の内容を見ます（導入スクリプトの 8 は、上の「another kikitori shadows」の行です） |
+| 終了コード 8 で止まった | 処理の途中で失敗しました。`-v` を付けて打ち直し、stderr の内容を見ます（インストールスクリプトの 8 は、上の「another kikitori shadows」の行です） |
 | 終了コード 9 で止まった | `--external claude` を付けたのに `claude` コマンドがありません。Claude Code を入れるか、`--external` を外して手元で直します |
 | 終了コード 11 で止まった | `--dtype fp16` を付けて打ち直します（[補正の速さとメモリ](#補正の速さとメモリ)） |
 | 補正が「長さの規則」で直したと出た | Ollama が無いか、答えていません。Ollama を自分で入れて起動し、`kikitori refine --setup` で LLM のモデルを取得します |

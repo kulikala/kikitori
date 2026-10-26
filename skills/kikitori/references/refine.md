@@ -24,7 +24,8 @@
 - 直し方が利用者の望みに足りないときは、利用者に Ollama を入れて起動してもらってから `kikitori refine --setup` でモデルを取得するか（取得なので了承が要る）、利用者が外部の LLM を使うと言っていれば `--external` に進めます。
 - `kikitori refine` は Ollama を起動しません。Ollama が止まっていれば長さの規則に切り替え、終了コード 0 で終わります。kikitori は Ollama を入れも起動もしないので、Ollama の起動は利用者に頼みます。
 - B・K が無いと取得の確認が出て、あなたの実行では終了コード 6 で止まります。了承を得て `--yes` を付けるか、先に `kikitori models pull --refine --yes` で取得します。
-- Ollama は 0.40.0 以上が要ります。古いと `kikitori refine --setup` が止まり、更新の仕方を出します。
+- 手元の PC で動かす LLM は Ollama だけに対応しています。利用者が Ollama 以外の手元の LLM（LM Studio など）を使いたいと言ったら、kikitori から直接はつなげないので、`--external bundle` で問いを出し、その LLM の答えを `--apply` で戻します。
+- Ollama は 0.40.0 以上が要ります。古いと `kikitori refine --setup` は LLM のモデルを取得せず、更新の案内を出します。
 - 大きなモデルの名前は `--merge-model <名前>`（環境変数 `KIKITORI_LLM`）で替えられます。
 
 ## あなたが直す（--external bundle）

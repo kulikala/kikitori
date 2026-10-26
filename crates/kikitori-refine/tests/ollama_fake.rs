@@ -83,7 +83,7 @@ fn glossary_fix_golden_with_fake_ollama() {
     assert_eq!(body, g["systemone_body"]);
 }
 
-// --- --setup: 導入スクリプトが失敗を返しても、Ollama 本体が入っていれば続く ---
+// --- --setup: インストールスクリプトが失敗を返しても、Ollama 本体が入っていれば続く ---
 
 fn hw(kind: &'static str, gb: u64) -> kikitori_refine::catalog::Hardware {
     kikitori_refine::catalog::Hardware {

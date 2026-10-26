@@ -2,7 +2,7 @@
 
 日本語の会議の録音を、話者ごとに分けて文字にするコマンドラインツールです。
 
-[導入](#導入) · [使い方](#使い方) · [補正](#補正) · [困ったとき](docs/USAGE.md#困ったとき) · [通信と書き込むもの](docs/DISCLOSURES.md) · [変更点](CHANGELOG.md)
+[インストール](#インストール) · [使い方](#使い方) · [補正](#補正) · [困ったとき](docs/USAGE.md#困ったとき) · [通信と書き込むもの](docs/DISCLOSURES.md) · [変更点](CHANGELOG.md)
 
 ```console
 $ kikitori transcribe 定例会議.m4a --num-speakers 2
@@ -12,7 +12,7 @@ $ kikitori transcribe 定例会議.m4a --num-speakers 2
 
 - **手元の PC で完結します。** 文字起こしも補正も既定では手元の PC で動き、録音も文字も外へ送りません。モデルの取得にも、アカウントや API キーは要りません。
 - **1 本の実行ファイルで動きます。** 文字起こしに要るのは、実行ファイルとモデルだけです。Python などの実行環境は要りません。macOS（Apple Silicon）、Linux、Windows に対応します。
-- **誤りを直す補正があります。** `kikitori refine` は、同じ音声を別の 2 つの音声認識でも文字にし、LLM と突き合わせて、誤変換や取りこぼしを直します。LLM は、手元の PC で動かす Ollama か、外部の LLM（`claude` コマンド、または kikitori を呼んだエージェント）を選べます。
+- **誤りを直す補正があります。** `kikitori refine` は、同じ音声を別の 2 つの音声認識でも文字にし、LLM と突き合わせて、誤変換や取りこぼしを直します。LLM は、手元の PC で動かす Ollama か、外部の LLM（`claude` コマンド、または kikitori を呼んだエージェント）を選べます。手元の PC で動かす LLM は、Ollama だけに対応しています。
 - **エージェントから使えます。** Claude Code・Codex 用のスキル、JSON の出力と診断ログ、失敗の種類ごとの終了コードがあります。
 
 ## 向いている使い方
@@ -31,26 +31,51 @@ Web 会議や会議室で録った日本語の会議を、あとから文字に�
 
 | OS | 確かめた範囲 |
 |---|---|
-| macOS（Apple Silicon） | 導入、文字起こし、補正、削除 |
-| Linux arm64 | 導入、文字起こし、補正 |
-| Windows arm64 | 導入、文字起こし、削除 |
+| macOS（Apple Silicon） | インストール、文字起こし、補正、削除 |
+| Linux arm64 | インストール、文字起こし、補正 |
+| Windows arm64 | インストール、文字起こし、削除 |
 | Linux x86_64・Windows x64 | 起動と文字起こし（arm64 の PC 上のエミュレーション） |
 
 文字起こしはどの環境でも CPU で動きます。GPU は補正の一部に使い、Mac では Apple Silicon の GPU を使います。NVIDIA の GPU 向けの CUDA 版もありますが、NVIDIA の GPU を積んだ PC では確かめていません。GPU が無い PC でも、同じ使い方で全機能を使えます。詳しくは [INSTALL.md の動く環境](docs/INSTALL.md#動く環境) にあります。自分の PC で何が動くかは、入れたあと `kikitori doctor` で分かります。
 
-## 導入
+## インストール
+
+打つ 1 行は、使う PC と、開く端末で決まります。
+
+| 使う PC | 開く端末 | 打つ 1 行 |
+|---|---|---|
+| macOS（Apple Silicon） | ターミナル | `curl` で始まる 1 行 |
+| Linux（x86_64・arm64） | 端末（bash・zsh など） | `curl` で始まる 1 行 |
+| Windows（x64・arm64） | PowerShell（スタートメニューで「PowerShell」と探して開く） | `irm` で始まる 1 行 |
+
+macOS・Linux では、次の 1 行を打ちます。
 
 ```bash
-curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | sh     # macOS・Linux
+curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | sh
 ```
+
+Windows では、PowerShell で次の 1 行を打ちます。`irm` は PowerShell のコマンドなので、コマンドプロンプト（`cmd`）では動きません。Git Bash のような Windows 上の bash で `curl` の 1 行を打っても、対応していない環境として止まります。
 
 ```powershell
-irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex            # Windows
+irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex
 ```
 
-導入スクリプトは、実行ファイルを置いて PATH に足し、文字起こしのモデル（約 800MB）と補正のモデルを取得します。取得の前には、容量を出して確認を求めます。管理者権限は要りません。補正で LLM を使うには、Ollama を自分で入れておきます（[補正](#補正)）。取得する量と置き場の詳細は [docs/INSTALL.md](docs/INSTALL.md) にあります。
+Intel の Mac には対応していません（[Intel の Mac](docs/INSTALL.md#intel-の-mac)）。
 
-文字起こしだけを入れるなら、`KIKITORI_NO_REFINE=1` を付けます（`curl -fsSL …/install.sh | KIKITORI_NO_REFINE=1 sh`。Windows の付け方は [docs/INSTALL.md](docs/INSTALL.md#導入の環境変数)）。
+インストールスクリプトは、実行ファイルを置いて PATH に足し、文字起こしのモデル（約 800MB）と補正のモデルを取得します。取得の前には、容量を出して確認を求めます。管理者権限は要りません。補正で LLM を使うには、Ollama を自分で入れておきます（[補正](#補正)）。取得する量と置き場の詳細は [docs/INSTALL.md](docs/INSTALL.md) にあります。
+
+文字起こしだけを使うなら、補正のモデルを取得せずに入れられます（取得は約 800MB）。macOS・Linux では次のとおりです。
+
+```bash
+curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | KIKITORI_NO_REFINE=1 sh
+```
+
+Windows では、PowerShell で次の 2 行を打ちます。
+
+```powershell
+$env:KIKITORI_NO_REFINE = "1"
+irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex
+```
 
 入れ終わったら新しい端末を開き、1 本を起こしてみます。
 
@@ -58,7 +83,7 @@ irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | 
 kikitori transcribe 会議.m4a --num-speakers 4
 ```
 
-導入の環境変数、端末の無い環境（エージェント・CI）での入れ方、NVIDIA の GPU の使い方、更新、削除、Python 版 0.2.x からの移行は、[docs/INSTALL.md](docs/INSTALL.md) にあります。更新は `kikitori update`、削除は `kikitori uninstall` です。
+インストールの環境変数、端末の無い環境（エージェント・CI）での入れ方、NVIDIA の GPU の使い方、更新、削除、Python 版 0.2.x からの移行は、[docs/INSTALL.md](docs/INSTALL.md) にあります。更新は `kikitori update`、削除は `kikitori uninstall` です。
 
 ## 使い方
 
@@ -74,7 +99,7 @@ kikitori transcribe 会議.m4a --dict 辞書.tsv --format vtt     # 固有名詞
 
 ## 補正
 
-`kikitori refine` は、文字起こしの誤りを直します。同じ音声を、文字起こしとは別の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）でも文字にし、LLM にそれらを突き合わせさせて、本文を直します。LLM は、既定では手元の PC で動く Ollama を使い、指定すれば外部の LLM も使えます。kikitori は Ollama を入れも起動もしません。LLM で直すには、Ollama の案内（https://ollama.com）に従って自分で入れ、起動しておきます。Ollama が無ければ、LLM を使わない直し方になります。用語集（`--glossary`）を渡すと、社名や製品名をその表記に直します。
+`kikitori refine` は、文字起こしの誤りを直します。同じ音声を、文字起こしとは別の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）でも文字にし、LLM にそれらを突き合わせさせて、本文を直します。LLM は、既定では手元の PC で動く Ollama を使い、指定すれば外部の LLM も使えます。手元の PC で動かす LLM は Ollama だけに対応していて、LM Studio・llama.cpp・vLLM のような、OpenAI 互換の API で LLM を動かすソフトにはつなげません。そうしたソフトの LLM で直したいときは、`--external bundle` で問いを JSON に出し、その LLM に答えさせてから kikitori に戻します（[外部の LLM で直す](docs/USAGE.md#外部の-llm-で直す)）。kikitori は Ollama を入れも起動もしません。LLM で直すには、Ollama の案内（https://ollama.com）に従って自分で入れ、起動しておきます。Ollama が無ければ、LLM を使わない直し方になります。用語集（`--glossary`）を渡すと、社名や製品名をその表記に直します。
 
 ```bash
 kikitori refine --plan --glossary 用語集.tsv        # どう直すかだけを見る

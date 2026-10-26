@@ -216,7 +216,7 @@ fn delete_ollama_model(name: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// Windows の導入スクリプトはユーザーの PATH（レジストリ）にフォルダを足し、そのフォルダを受け取り記録に残す。
+/// Windows のインストールスクリプトはユーザーの PATH（レジストリ）にフォルダを足し、そのフォルダを受け取り記録に残す。
 fn remove_user_path_entry(dir: &Path) {
     let quoted = dir.display().to_string().replace('\'', "''");
     let script = format!(
@@ -249,7 +249,7 @@ fn remove_self(exe: &Path) {
             let dir = old.parent().unwrap_or(Path::new("."));
             let quote = |p: &Path| p.display().to_string().replace('\'', "''");
             // この実行ファイルが終わるのを待って消す。ウイルス対策が掴んでいる間は消せないので、10 秒まで繰り返す。
-            // 空になった導入先のフォルダも消す（中に利用者のものがあれば残る）。
+            // 空になったインストール先のフォルダも消す（中に利用者のものがあれば残る）。
             let script = format!(
                 "$o='{}'; $d='{}'; Wait-Process -Id {} -Timeout 60 -ErrorAction SilentlyContinue; \
                  for ($i = 0; $i -lt 20; $i++) {{ \
