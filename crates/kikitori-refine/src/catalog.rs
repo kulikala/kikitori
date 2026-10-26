@@ -40,7 +40,7 @@ pub fn set_which_override(value: Option<WhichHook>) -> Option<WhichHook> {
     std::mem::replace(&mut *which_override().lock().unwrap(), value)
 }
 
-pub const GB: u64 = 2u64.pow(30);
+pub const GB: u64 = 1_000_000_000;
 pub const HEADROOM: u64 = 8 * GB;
 pub const KINDS: [&str; 3] = ["apple", "nvidia", "cpu"];
 

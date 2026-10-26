@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 
 use crate::{catalog, evidence, ollama};
 
-pub const QWEN_SIZE: u64 = (3.8 * catalog::GB as f64) as u64;
-pub const KANA_SIZE: u64 = (3.0 * catalog::GB as f64) as u64;
+pub const QWEN_SIZE: u64 = (4.1 * catalog::GB as f64) as u64;
+pub const KANA_SIZE: u64 = (3.2 * catalog::GB as f64) as u64;
 pub const SPARE: u64 = 2 * catalog::GB;
 
 pub const APP: &str = "/Applications/Ollama.app";
@@ -355,7 +355,7 @@ pub fn say(msg: &str) {
     kikitori_core::notice::info(msg);
 }
 
-/// 入れる前の確認。/dev/tty に `[y/N]:` を出して読む。ターミナルが無ければ false。
+/// 入れる前の確認。/dev/tty に `[y/N]:` を出して読む。TTY が無ければ false。
 pub fn confirm(total: u64) -> bool {
     use std::io::{Read, Write};
     let mut tty = match std::fs::OpenOptions::new()
@@ -415,7 +415,7 @@ pub fn to_exit_code(outcome: SetupOutcome) -> Result<(), CliError> {
         )),
         SetupOutcome::NoTerminal => Err(CliError::new(
             ErrorKind::NeedsConfirmation,
-            "ターミナルが無いので確認できません。",
+            "TTY が無いので確認できません。",
             "入れてよければ --yes を付けて実行し直してください。",
         )),
         SetupOutcome::Declined => Err(CliError::new(

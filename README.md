@@ -56,7 +56,7 @@ Web 会議や会議室で録音した日本語の会議を、あとから文字�
 | 文字起こし | 文字起こしのモデル（ReazonSpeech） | 録音を文字にする | 約 750MB |
 | 文字起こし | 日本語と英語の文字起こしのモデル（ReazonSpeech ja-en） | 日本語に英語が混ざる録音を文字にする。`--model ja-en` を初めて使うときにダウンロードする | 約 440MB（ダウンロードする量） |
 | 文字起こし | 形態素解析の辞書（unidic-lite） | `--dict` で語の読みを調べる | 約 250MB（ダウンロードする量は約 47MB） |
-| 補正 | 音声認識モデル（Qwen3-ASR と kana-whisper） | 誤りを直す根拠にするため、同じ音声を文字起こしし直す | 約 6.8GB |
+| 補正 | 音声認識モデル（Qwen3-ASR と kana-whisper） | 誤りを直す根拠にするため、同じ音声を文字起こしし直す | 約 7.3GB |
 | 補正 | 小さな LLM のモデル | 用語集の語に置き換えるかを選ぶ | 約 0.8GB |
 | 補正 | 大きな LLM のモデル | 文字起こしと 2 つの認識結果を突き合わせて本文を直す。メモリが 26GB 以上の Apple Silicon の Mac か、GPU のメモリが 26GB 以上の NVIDIA の GPU のときだけダウンロードする | 約 18GB |
 
@@ -76,6 +76,8 @@ Web 会議や会議室で録音した日本語の会議を、あとから文字�
 補正が手元の PC で使える LLM は、Ollama のモデルだけです。LM Studio・llama.cpp・vLLM のような、OpenAI 互換の API で LLM を動かすソフトウェアには対応していません（[issue #1](https://github.com/kulikala/kikitori/issues/1)）。
 
 ## インストール
+
+インストールが終わったら、新しいターミナルを開くと `kikitori` コマンドを使えます。管理者権限は必要ありません。
 
 ### macOS の場合
 
@@ -120,9 +122,9 @@ $env:KIKITORI_NO_REFINE = "1"
 irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex
 ```
 
-### インストールのあと
+### 詳しいインストール方法
 
-インストールが終わったら、新しいターミナルを開くと `kikitori` コマンドを使えます。あとから補正を使えるようにする方法、ほかのインストールのオプション（環境変数）、ターミナルの無い環境（AI エージェント・CI）でのインストール、更新、削除は [docs/INSTALL.md](docs/INSTALL.md) に書いてあります。更新には `kikitori update`、削除には `kikitori uninstall` を使います。
+あとから補正を使えるようにする方法、インストールのオプション（環境変数）、TTY の無い環境（AI エージェント・CI）でのインストール、更新、削除は [docs/INSTALL.md](docs/INSTALL.md) に書いてあります。更新には `kikitori update`、削除には `kikitori uninstall` を使います。
 
 ## 使い方
 

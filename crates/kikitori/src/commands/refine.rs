@@ -101,7 +101,7 @@ fn engine_setup(args: &RefineArgs) -> Result<EngineSetup, CliError> {
 /// B と K は順に読み込むので、要るメモリは大きいほうの B に作業領域を足した分。
 /// B（Qwen3-ASR 2.04B）は f32 で約 8.2GB、f16 で約 4.1GB。K（kana-whisper 0.81B）は f32 で約 3.0GB。
 fn check_memory(backend: &str, dtype: &str) -> Result<(), CliError> {
-    const GB: f64 = 1e9;
+    const GB: f64 = kikitori_refine::catalog::GB as f64;
     let half = match dtype {
         "fp16" | "bf16" => true,
         "auto" => backend != "cpu",

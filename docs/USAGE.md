@@ -100,7 +100,7 @@ kikitori refine 会議.m4a --glossary 用語集.tsv --external claude   # claude
 | 上のどれにも当たらない（Ollama が応答しない、`--glossary` が無いなど） | 長さの規則。B の文字数が A の 1.6 倍＋3 文字を超える区間だけ B を採り、A が落とした発話を補う | 24.8〜25.2% |
 
 - CER は 5 分・1126 字の会議録音 1 本を Apple Silicon で測った値です。`--external claude` のモデルは Claude Haiku です。幅は同じ条件で 2〜3 回測った値の幅です。直し方どうしを同じ録音で比べるための値で、ほかの録音で同じ差が出るとは限りません。[MODELS.md](MODELS.md) の文字起こしの CER とは、データも採点の仕方も違うので比べられません。
-- 表の 1 行目は、`--external` より先に当たります。B・K が無いとき、`kikitori refine` は取得してよいかを尋ね、断ると文字起こしの本文のまま出します。ターミナルが無ければ終了コード 6 で、`--offline` なら終了コード 5 で止まります。
+- 表の 1 行目は、`--external` より先に当たります。B・K が無いとき、`kikitori refine` は取得してよいかを尋ね、断ると文字起こしの本文のまま出します。TTY が無ければ終了コード 6 で、`--offline` なら終了コード 5 で止まります。
 - 普段の `kikitori refine` は、Ollama が止まっていても Ollama を起動しません。長さの規則に切り替え、そのことを stderr に出して、終了コード 0 で終わります。
 - Ollama の接続先は、環境変数 `KIKITORI_OLLAMA`、それが無ければ `OLLAMA_HOST`、どちらも無ければ `localhost:11434` です。
 - merge に使うモデルは `--merge-model <名前>`（環境変数 `KIKITORI_LLM`）で決められます。
@@ -153,7 +153,7 @@ Claude Code や Codex のような生成 AI のエージェントに kikitori �
 - **スキル。** `kikitori skill install` が、kikitori の使い方を書いた手順書（SKILL.md）をエージェントのスキルの置き場に書きます。書き込む前の確認はありません。既定は Claude Code（`~/.claude/skills/kikitori`）で、`--agent codex` なら Codex（`~/.codex/skills/kikitori`）です。置き場は `kikitori skill path` で分かり、`kikitori skill uninstall` で消せます。同じ手順書が、このリポジトリの `skills/kikitori/` にもあります。
 - **機械が読むログ。** `--log-format json`（環境変数 `KIKITORI_LOG_FORMAT`）を付けると、stderr が 1 行 1 件の JSON になります。各行の `type` は `progress`・`info`・`warning`・`error`・`summary` のどれかです。`error` の行は、`code`（下の表の名前）、`message`、`hint`（次に実行するとよいコマンド）を持ちます。stdout には、選んだ形式の結果だけが出ます。
 - **JSON の形。** `kikitori schema <名前>` が JSON Schema を出します。名前は `transcript`（json・yaml の形）・`transcript-v1`（json-v1 の形）・`bundle`・`doctor`・`engines` です。
-- **確認。** モデルの取得、補正の環境のインストール、削除、更新の前には確認が出ます。ターミナルが無いときは答えを待たずに終了コード 6 で止まり、`--yes` を案内します。`--dry-run` で、何をするかと容量を先に見られます。
+- **確認。** モデルの取得、補正の環境のインストール、削除、更新の前には確認が出ます。TTY が無いときは答えを待たずに終了コード 6 で止まり、`--yes` を案内します。`--dry-run` で、何をするかと容量を先に見られます。
 
 ### 終了コード
 
@@ -181,7 +181,7 @@ Claude Code や Codex のような生成 AI のエージェントに kikitori �
 | インストールスクリプトが「Note: kikitori setup stopped (exit …)」と出した | 実行ファイルだけが入り、モデルも補正の環境も入っていません。出た終了コードの行を下の表で見て対処し、`kikitori setup` を実行し直します。補正も使うなら、続けて `kikitori refine --setup` を実行します（[インストール](INSTALL.md#インストール)） |
 | インストールスクリプトが「Note: kikitori refine --setup stopped (exit …)」と出した | 文字起こしは使えます。補正の環境が途中までです。出た終了コードの行を下の表で見て対処し、`kikitori refine --setup` を実行し直します |
 | インストールスクリプトが「another kikitori shadows the installed binary」と出して終了コード 8 で止まった | pip など `uv tool` 以外で入れた Python 版が、PATH で先に見つかっています。`pip uninstall kikitori` などで外してから、インストールのコマンドを実行し直します |
-| インストールスクリプトが「Python kikitori found in uv; rerun with KIKITORI_YES=1」と出した | `uv tool` で入れた Python 版を外してよいかを尋ねたいのに、ターミナルがありません（エージェントや CI での実行）。外してよければ `curl -fsSL …/install.sh \| KIKITORI_YES=1 sh` と実行し直します（[旧版 0.2.x から移行する](INSTALL.md#旧版-02x-から移行する)） |
+| インストールスクリプトが「Python kikitori found in uv; rerun with KIKITORI_YES=1」と出した | `uv tool` で入れた Python 版を外してよいかを尋ねたいのに、TTY がありません（エージェントや CI での実行）。外してよければ `curl -fsSL …/install.sh \| KIKITORI_YES=1 sh` と実行し直します（[旧版 0.2.x から移行する](INSTALL.md#旧版-02x-から移行する)） |
 | インストールスクリプトが「installation cancelled」と出した | Python 版を外す問いに「いいえ」と答えたので止まりました。外してよければ実行し直して「y」と答えます |
 | 終了コード 2 で止まった | オプションや値の誤りです。`kikitori <コマンド> --help` で書き方を確かめます |
 | 終了コード 3 で止まった | 音声のファイルが無いか、読めない形式です。パスと形式（[ffmpeg](INSTALL.md#ffmpeg)）を確かめます |

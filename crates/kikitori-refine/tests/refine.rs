@@ -423,7 +423,8 @@ fn detect_with_overrides() {
     })));
     let hw = catalog::detect_with_darwin_arm(None, false).unwrap();
     assert_eq!(hw.kind, "nvidia");
-    assert_eq!(hw.memory, Some(48 * GB));
+    // nvidia-smi は MiB で返す（49152 MiB）
+    assert_eq!(hw.memory, Some(49152 * 1024 * 1024));
 
     // GPU が無ければ cpu
     catalog::set_which_override(Some(Box::new(|_| None)));

@@ -149,7 +149,7 @@ pub fn confirm(yes: bool, prompt: &str) -> Result<bool, kikitori_core::CliError>
             None => {
                 return Err(kikitori_core::CliError::new(
                     kikitori_core::ErrorKind::NeedsConfirmation,
-                    "この操作には確認が必要ですが、ターミナルがありません。",
+                    "この操作には確認が必要ですが、TTY がありません。",
                     "`--yes` を付けるか、KIKITORI_YES=1 を設定して再実行してください。",
                 ))
             }

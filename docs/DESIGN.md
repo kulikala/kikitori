@@ -85,7 +85,7 @@ kikitori のモデルの置き場は `~/.cache/kikitori/models`（`KIKITORI_MODE
 
 - 結果は stdout、進み具合と警告は stderr。`--log-format json` で stderr を 1 行 1 件の JSON にできる。外部のライブラリが stderr に書く行も、この形に包む。
 - 終了コードは失敗の種類ごとに決め、失敗の表示に次に実行するコマンド（`hint`）を入れる。
-- 対話が要る所を作らない。大きな取得と削除は `--dry-run` で中身と容量を出し、`--yes` で確認を省く。ターミナルが無いときは確認を待たずに終了コード 6 で終わる。
+- 対話が要る所を作らない。大きな取得と削除は `--dry-run` で中身と容量を出し、`--yes` で確認を省く。TTY が無いときは確認を待たずに終了コード 6 で終わる。
 - JSON の形は `schema` サブコマンドで出せ、テストで実際の出力と照合する。
 - 同梱のスキル（`crates/kikitori/skill/` の SKILL.md と `references/`）を `skill install` でエージェントの置き場に書く。SKILL.md は毎回読み込まれるので判断に要ることだけを置き、インストール・文字起こし・補正の細部は、要るときに読む `references/` に分ける。リポジトリ直下の `skills/kikitori/` は同じ内容のコピーで、テストで同一を検査する。`kikitori update` は、置き換えた新しい版にスキルを書き直させる。
 

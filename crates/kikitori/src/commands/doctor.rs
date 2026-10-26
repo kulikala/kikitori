@@ -335,7 +335,10 @@ fn model_rows() -> Vec<ModelRow> {
 }
 
 fn gb(bytes: u64) -> String {
-    format!("{:.1}GB", bytes as f64 / 1e9)
+    format!(
+        "{:.1}GB",
+        bytes as f64 / kikitori_refine::catalog::GB as f64
+    )
 }
 
 fn ollama_responds() -> bool {

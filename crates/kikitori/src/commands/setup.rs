@@ -44,8 +44,8 @@ pub fn run(yes: bool, dry_run: bool, offline: bool) -> Result<(), CliError> {
                 format!(
                     "{} のあるディスクの空きが {:.1}GB で、取得と展開に約 {:.1}GB 要ります。",
                     root.display(),
-                    free as f64 / 1e9,
-                    need as f64 / 1e9
+                    free as f64 / kikitori_refine::catalog::GB as f64,
+                    need as f64 / kikitori_refine::catalog::GB as f64
                 ),
                 "ディスクを空けてから `kikitori setup` を再実行してください。置き場は環境変数 KIKITORI_MODELS で変えられます。",
             ));
