@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `kikitori skill install` は、SKILL.md に加えて `references/` の手順書（導入・文字起こし・補正）も書く。SKILL.md には判断に要ることだけを残した。
+- README を短い入口にし、細部を `docs/INSTALL.md`・`docs/USAGE.md`・`docs/DISCLOSURES.md`・`docs/MODELS.md` に分けた。
+
+### Fixed
+
+- `kikitori update` が、更新前の版の持つ古い SKILL.md を書き戻していた。置き換えた新しい版にスキルを書き直させる。0.3.0 から上げるときは、動くのが 0.3.0 の処理なのでスキルは古いまま残る。上げたあとで `kikitori skill install` を打ち直す。
+- macOS・Linux の導入スクリプトが、`uv tool` で入れた Python 版を外してよいかを標準入力に尋ねていたため、`curl … | sh` の形では答えられず止まっていた。kikitori 本体の確認と同じく端末（`/dev/tty`）に尋ねる。
+
 ## [0.3.0] - 2026-10-26
 
 Python 版から Rust の 1 本の実行ファイルに置き換わりました。Python と uv は要りません。導入の 1 行（[README](README.md#導入)）は、Python 版 0.2.x が入っていれば外してから入れます。モデルは取り直しません。

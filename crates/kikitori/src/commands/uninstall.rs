@@ -135,6 +135,13 @@ pub fn run(keep_models: bool, yes: bool, dry_run: bool) -> Result<(), CliError> 
             log::warning(&format!("{} を消せませんでした: {e}", x.display()));
         }
     }
+    for x in p
+        .paths
+        .iter()
+        .filter(|x| x.components().any(|c| c.as_os_str() == "skills"))
+    {
+        crate::commands::skill::remove_empty_dirs(x);
+    }
     let _ = fs::remove_file(receipt::path());
     // 空になったフォルダだけを片付ける（中に利用者のものがあれば残る）
     for dir in [paths::config_dir(), kikitori_cache_dir()] {

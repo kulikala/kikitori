@@ -153,12 +153,18 @@ pub fn run(version: Option<String>, variant: Option<String>) -> Result<(), Strin
     if !cfg!(windows) {
         let _ = fs::remove_file(old);
     }
-    let bundled_skill = include_str!("../../skill/SKILL.md");
+    // スキルは新しい版が書き直す。動いている古い版が持つのは古い版の中身のため
     for (_, path) in receipt::entries()
         .into_iter()
-        .filter(|(kind, _)| kind == "skill")
+        .filter(|(kind, value)| kind == "skill" && value.ends_with("SKILL.md"))
     {
-        let _ = fs::write(path, bundled_skill);
+        if let Some(dir) = std::path::Path::new(&path).parent() {
+            let _ = Command::new(&exe)
+                .args(["skill", "install", "--dir"])
+                .arg(dir)
+                .stdout(std::process::Stdio::null())
+                .status();
+        }
     }
     receipt::record("variant", &variant)?;
     let _ = fs::remove_dir_all(tmp);
