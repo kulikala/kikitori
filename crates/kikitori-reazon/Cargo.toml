@@ -7,8 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-kikitori-core = { version = "0.3.0", path = "../kikitori-core" }
-kikitori-knf-sys = { version = "0.3.0", path = "../kikitori-knf-sys" }
+kikitori-core = { version = "0.4.0-dev", path = "../kikitori-core" }
+kikitori-knf-sys = { version = "0.4.0-dev", path = "../kikitori-knf-sys" }
 ndarray = "0.17"
 ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "api-28", "ndarray", "alternative-backend"] }
 ort-sys = { version = "=2.0.0-rc.15", default-features = false, features = ["api-28"] }
