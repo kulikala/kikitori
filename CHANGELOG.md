@@ -5,21 +5,22 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-27
+
 ### Changed
 
-- `kikitori skill install` は、SKILL.md に加えて `references/` の手順書（インストール・文字起こし・補正）も書く。SKILL.md には判断に要ることだけを残した。
-- README を短い入口にし、細部を `docs/INSTALL.md`・`docs/USAGE.md`・`docs/DISCLOSURES.md`・`docs/MODELS.md` に分けた。
-
-- `kikitori refine --setup`（インストールスクリプトの補正の段を含む）は、Ollama を入れも起動もしない。Ollama が無いか止まっているときは案内を出し、B・K だけを取得する。Ollama の入れ方と、入れるかどうかは利用者が決める。
+- `kikitori skill install` は、SKILL.md に加えて `references/` の手順書（インストール・文字起こし・補正）も書く。SKILL.md には判断に必要なことだけを残した。
+- `kikitori refine --setup`（インストールスクリプトの補正の段を含む）は、Ollama をインストールも起動もしない。Ollama が無いか止まっているときは案内を出し、補正の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）だけをダウンロードする。Ollama をインストールするかどうかは利用者が決める。
+- README を短い入口にし、細部を `docs/INSTALL.md`・`docs/USAGE.md`・`docs/DISCLOSURES.md`・`docs/MODELS.md` に分けた。README には、特長、kikitori が受け持つ範囲、対応環境の表、必要なディスク容量、別途必要なソフトウェアを書いた。
 
 ### Fixed
 
-- 補正の容量の表示と見積もりが 1024 単位（GiB）で、文字起こしや `kikitori doctor` の 1000 単位（GB）と混ざっていた。どれも 1000 単位にそろえる。B・K は約 6.8GB と出ていたが、実際は約 7.3GB。LLM のモデルの大きさは、Ollama の表示と同じ数え方になる。
-- `kikitori update` が、更新前の版の持つ古い SKILL.md を書き戻していた。置き換えた新しい版にスキルを書き直させる。0.3.0 から上げるときは、動くのが 0.3.0 の処理なのでスキルは古いまま残る。上げたあとで `kikitori skill install` を打ち直す。
-- macOS・Linux のインストールスクリプトが、`uv tool` で入れた Python 版を外してよいかを標準入力に尋ねていたため、`curl … | sh` の形では答えられず止まっていた。ターミナル（`/dev/tty`）に尋ねる。
-- `kikitori setup`・`kikitori models pull`・`kikitori uninstall` などの確認が標準入力を読んでいたため、`curl … | sh` でインストールすると、文字起こしのモデルのダウンロードの確認に答えられず止まっていた。標準入力がパイプのときは、ターミナルに直接尋ねる。確認の質問の文が表示されないこともあったので、表示されるようにした。
+- 補正の容量の表示と見積もりが 1024 単位（GiB）で、文字起こしや `kikitori doctor` の 1000 単位（GB）と混ざっていた。どれも 1000 単位にそろえる。補正の 2 つの音声認識モデルは約 6.8GB と出ていたが、実際は約 7.3GB。LLM のモデルの大きさは、Ollama の表示と同じ数え方になる。
+- `kikitori update` が、更新前の版の持つ古い SKILL.md を書き戻していた。置き換えた新しい版にスキルを書き直させる。0.3.0 から更新するときは、動くのが 0.3.0 の処理なので、スキルは古いまま残る。更新したあとで `kikitori skill install` を実行し直す。
+- macOS・Linux のインストールスクリプトが、`uv tool` でインストールした Python 版を外してよいかを標準入力に尋ねていたため、`curl … | sh` の形では答えられず止まっていた。TTY（`/dev/tty`）に直接尋ねる。
+- `kikitori setup`・`kikitori models pull`・`kikitori uninstall` などの確認が標準入力を読んでいたため、`curl … | sh` でインストールすると、文字起こしのモデルのダウンロードの確認に答えられず止まっていた。標準入力がパイプのときは、TTY に直接尋ねる。確認の質問の文が表示されないこともあったので、表示されるようにした。
 - `kikitori update --dry-run` が `--dry-run` を無視して更新していた。更新先の版と取得するファイルを出すだけにする。
-- `kikitori uninstall` が、B・K の Hugging Face のキャッシュで参照（snapshots）だけを消し、実体（blobs、約 6.8GB）を残していた。ほかのスナップショットが使っていない実体も消す。
+- `kikitori uninstall` が、補正の 2 つの音声認識モデルの Hugging Face のキャッシュで、参照（snapshots）だけを消し、実体（blobs、約 7.3GB）を残していた。ほかのスナップショットが使っていない実体も消す。
 - `kikitori doctor` と `kikitori uninstall` が、Ollama の接続先を `localhost:11434`（`uninstall` は `OLLAMA_HOST` だけ）に決め打ちしていた。補正と同じく `KIKITORI_OLLAMA`、`OLLAMA_HOST`、`localhost:11434` の順に決める。
 
 ## [0.3.0] - 2026-10-26
