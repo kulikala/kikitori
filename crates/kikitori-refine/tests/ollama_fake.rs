@@ -106,9 +106,6 @@ fn state() -> State {
         systemd: false,
         models: Default::default(),
         tty: false,
-        sudo_needed: false,
-        sudo_ok: false,
-        tools_missing: Vec::new(),
         free_ollama: Some(500 * GB),
         free_hf: Some(500 * GB),
         hf_missing: Vec::new(),
@@ -117,29 +114,13 @@ fn state() -> State {
 }
 
 #[test]
-fn run_setup_continues_when_install_script_fails_after_installing() {
+fn run_setup_pulls_from_a_running_ollama_and_records_the_model() {
     let f = server::spawn();
     f.pulls.lock().unwrap().insert(
         "tev1:0.8b-mxfp8".to_owned(),
         "{\"status\":\"pulling manifest\"}\n{\"status\":\"success\"}\n".to_owned(),
     );
     let dir = tempfile::tempdir().unwrap();
-    let app = dir.path().join("Ollama.app");
-    std::fs::create_dir(&app).unwrap();
-    let old_app = setup::set_app_override(Some(app.clone()));
-    let old_install = setup::set_install_override(Some(Box::new(move || {
-        // macOS の公式スクリプトは、Ollama.app を置いたあとの起動で失敗を返すことがある
-        let (shell, flag) = if cfg!(windows) {
-            ("cmd", "/C")
-        } else {
-            ("sh", "-c")
-        };
-        std::process::Command::new(shell)
-            .arg(flag)
-            .arg("exit 1")
-            .status()
-            .unwrap()
-    })));
     {
         let saved_home = std::env::var("HOME").ok();
         let saved_config = std::env::var("XDG_CONFIG_HOME").ok();
@@ -148,20 +129,16 @@ fn run_setup_continues_when_install_script_fails_after_installing() {
         std::env::set_var("XDG_CONFIG_HOME", dir.path().join("config"));
         std::env::set_var("KIKITORI_OLLAMA", &f.addr);
 
-        let s = state();
+        let mut s = state();
+        s.api = true;
+        s.app = true;
+        s.version = Some((0, 40, 8));
         let steps = setup::plan_setup(&s, true, None);
         let kinds: Vec<(&str, String)> = setup::todo(&steps)
             .iter()
             .map(|x| (x.kind, x.arg.clone()))
             .collect();
-        assert_eq!(
-            kinds,
-            vec![
-                ("install", String::new()),
-                ("start", String::new()),
-                ("pull", "tev1:0.8b-mxfp8".to_owned())
-            ]
-        );
+        assert_eq!(kinds, vec![("pull", "tev1:0.8b-mxfp8".to_owned())]);
 
         let outcome = setup::run_setup(&s, &steps, true, false);
         assert!(matches!(outcome, SetupOutcome::Done));
@@ -190,6 +167,4 @@ fn run_setup_continues_when_install_script_fails_after_installing() {
             std::env::remove_var("KIKITORI_OLLAMA")
         }
     }
-    setup::set_app_override(old_app);
-    setup::set_install_override(old_install);
 }

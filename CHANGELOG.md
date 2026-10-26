@@ -10,6 +10,8 @@
 - `kikitori skill install` は、SKILL.md に加えて `references/` の手順書（導入・文字起こし・補正）も書く。SKILL.md には判断に要ることだけを残した。
 - README を短い入口にし、細部を `docs/INSTALL.md`・`docs/USAGE.md`・`docs/DISCLOSURES.md`・`docs/MODELS.md` に分けた。
 
+- `kikitori refine --setup`（導入スクリプトの補正の段を含む）は、Ollama を入れも起動もしない。Ollama が無いか止まっているときは案内を出し、B・K だけを取得する。Ollama の入れ方と、入れるかどうかは利用者が決める。
+
 ### Fixed
 
 - `kikitori update` が、更新前の版の持つ古い SKILL.md を書き戻していた。置き換えた新しい版にスキルを書き直させる。0.3.0 から上げるときは、動くのが 0.3.0 の処理なのでスキルは古いまま残る。上げたあとで `kikitori skill install` を打ち直す。

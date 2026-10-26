@@ -93,7 +93,7 @@ pub fn choose(f: &Facts) -> Plan {
         if !f.no_ollama {
             notes.push(
                 "Ollama が答えないため、LLM を使わず長さの規則だけで直します".to_owned()
-                    + "（kikitori refine --setup で起こせます）",
+                    + "（LLM で直すには、Ollama を入れて起動し、kikitori refine --setup でモデルを取得します）",
             );
         }
         return Plan {

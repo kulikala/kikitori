@@ -21,8 +21,8 @@
 同じ会議録音 1 本で測った文字誤り率は、本文のままが 28.4%、外部の LLM（Claude Haiku）が約 20%、大きなモデルの突き合わせが約 22%、tev1 と長さの規則が約 25% でした。ほかの録音で同じ差が出るとは限りません。
 
 - 大きなモデル（Apple Silicon は `qwen3.8:27b-mlx`、NVIDIA は `qwen3.8:27b-q4_K_M`、どちらも 18GB）は、モデルを載せるメモリが 26GB 以上ある PC でだけ使われます。載せるメモリは、Apple Silicon では本体のメモリ、NVIDIA では最も大きい GPU 1 枚のメモリです。CPU だけの PC では使われません。
-- 直し方が利用者の望みに足りないときは、`kikitori refine --setup` で Ollama とモデルを入れるか（導入なので了承が要る）、利用者が外部の LLM を使うと言っていれば `--external` に進めます。
-- `kikitori refine` は Ollama を起動しません。Ollama が止まっていれば長さの規則に切り替え、終了コード 0 で終わります。Ollama を入れて起動するのは `kikitori refine --setup` です。
+- 直し方が利用者の望みに足りないときは、利用者に Ollama を入れて起動してもらってから `kikitori refine --setup` でモデルを取得するか（取得なので了承が要る）、利用者が外部の LLM を使うと言っていれば `--external` に進めます。
+- `kikitori refine` は Ollama を起動しません。Ollama が止まっていれば長さの規則に切り替え、終了コード 0 で終わります。kikitori は Ollama を入れも起動もしないので、Ollama の起動は利用者に頼みます。
 - B・K が無いと取得の確認が出て、あなたの実行では終了コード 6 で止まります。了承を得て `--yes` を付けるか、先に `kikitori models pull --refine --yes` で取得します。
 - Ollama は 0.40.0 以上が要ります。古いと `kikitori refine --setup` が止まり、更新の仕方を出します。
 - 大きなモデルの名前は `--merge-model <名前>`（環境変数 `KIKITORI_LLM`）で替えられます。

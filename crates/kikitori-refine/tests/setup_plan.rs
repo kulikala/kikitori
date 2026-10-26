@@ -26,9 +26,6 @@ fn base() -> State {
         systemd: false,
         models: Default::default(),
         tty: true,
-        sudo_needed: false,
-        sudo_ok: false,
-        tools_missing: Vec::new(),
         free_ollama: Some(500 * GB),
         free_hf: Some(500 * GB),
         hf_missing: Vec::new(),
@@ -51,20 +48,20 @@ fn kinds(s: &State, no_hf: bool) -> Vec<(String, String)> {
 }
 
 #[test]
-fn setup_fresh_mac_installs_starts_and_pulls() {
+fn setup_without_ollama_never_installs_and_still_fetches_b_k() {
     let mut s = base();
     s.hf_missing = vec![evidence::QWEN.to_owned(), evidence::KANA.to_owned()];
+    let steps = plan_setup(&s, false, None);
     assert_eq!(
         kinds(&s, false),
         vec![
-            ("install".to_owned(), String::new()),
-            ("start".to_owned(), String::new()),
-            ("pull".to_owned(), "qwen3.8:27b-mlx".to_owned()),
-            ("pull".to_owned(), "tev1:0.8b-mxfp8".to_owned()),
             ("hf".to_owned(), evidence::QWEN.to_owned()),
             ("hf".to_owned(), evidence::KANA.to_owned()),
         ]
     );
+    assert!(steps
+        .iter()
+        .any(|x| x.text.contains("kikitori は Ollama を入れません")));
 }
 
 #[test]
@@ -81,17 +78,14 @@ fn setup_second_run_has_nothing_to_do() {
 }
 
 #[test]
-fn setup_existing_app_is_started_not_installed() {
+fn setup_stopped_app_is_not_started() {
     let mut s = base();
     s.app = true;
-    let got = kinds(&s, true);
-    assert_eq!(
-        got[..2],
-        [
-            ("start".to_owned(), String::new()),
-            ("pull".to_owned(), "qwen3.8:27b-mlx".to_owned())
-        ]
-    );
+    let steps = plan_setup(&s, true, None);
+    assert!(todo(&steps).is_empty());
+    assert!(steps
+        .iter()
+        .any(|x| x.text.contains("Ollama のアプリを開く")));
 }
 
 #[test]
@@ -120,41 +114,14 @@ fn setup_remote_not_answering_stops() {
 }
 
 #[test]
-fn setup_needs_sudo_without_terminal_stops() {
-    let mut s = linux_cpu();
-    s.tty = false;
-    s.sudo_needed = true;
-    let last = plan_setup(&s, false, None).into_iter().last().unwrap();
-    assert_eq!(last.kind, "stop");
-    // sudo が使えるなら、端末が無くても入れる手に入る
-    let mut s = linux_cpu();
-    s.tty = false;
-    s.sudo_needed = true;
-    s.sudo_ok = true;
-    let got: Vec<String> = todo(&plan_setup(&s, false, None))
-        .iter()
-        .map(|x| x.kind.to_string())
-        .collect();
-    assert!(got.iter().any(|k| k == "install"));
-}
-
-#[test]
-fn setup_missing_tools_stop_before_install() {
-    let mut s = linux_cpu();
-    s.tools_missing = vec!["zstd".to_owned()];
-    let last = plan_setup(&s, false, None).into_iter().last().unwrap();
-    assert_eq!(last.kind, "stop");
-    assert!(last.text.contains("zstd"));
-}
-
-#[test]
-fn setup_old_ollama_stops() {
+fn setup_old_ollama_skips_llm_models() {
     let mut s = base();
     s.api = true;
     s.version = Some((0, 39, 1));
-    let last = plan_setup(&s, false, None).into_iter().last().unwrap();
-    assert_eq!(last.kind, "stop");
-    assert!(last.text.contains("0.40.0"));
+    s.hf_missing = vec![evidence::QWEN.to_owned()];
+    let steps = plan_setup(&s, false, None);
+    assert!(steps.iter().any(|x| x.text.contains("0.40.0")));
+    assert!(todo(&steps).iter().all(|x| x.kind == "hf"));
 }
 
 #[test]
@@ -183,7 +150,8 @@ fn setup_systemd_stopped_asks_user() {
     s.cli = true;
     s.systemd = true;
     let got = plan_setup(&s, false, None);
-    assert!(got.last().unwrap().text.contains("systemctl"));
+    assert!(got.iter().any(|x| x.text.contains("systemctl")));
+    assert!(todo(&got).iter().all(|x| x.kind == "hf"));
 }
 
 #[test]

@@ -48,7 +48,7 @@ curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install
 irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex            # Windows
 ```
 
-導入スクリプトは実行ファイルを置き（macOS・Linux は `~/.local/bin`、Windows は `%LOCALAPPDATA%\Programs\kikitori`）、PATH に足し、文字起こしのモデル（約 800MB）を取得し、補正の環境を用意します。補正の環境では、Ollama（手元で LLM を動かすソフト）が無ければ公式の導入スクリプトで入れ、補正に使うモデルを取得します。取得する量は、本体のメモリが 26GB 以上ある Apple Silicon の Mac と、GPU のメモリが 26GB 以上ある NVIDIA の GPU の PC で約 27GB、それ以外で約 8.5GB です。補正を動かすには、さらに 6〜10GB ほどの空きメモリが要ります。取得や導入の前には、何をするかと容量を出して確認を求めます。kikitori の導入に管理者権限は要りません。Ollama は kikitori を削除しても残ります。書き込むものの全部は [docs/DISCLOSURES.md](docs/DISCLOSURES.md) にあります。
+導入スクリプトは、実行ファイルを置いて PATH に足し、文字起こしのモデル（約 800MB）と補正のモデルを取得します。取得の前には、容量を出して確認を求めます。管理者権限は要りません。補正で LLM を使うには、Ollama を自分で入れておきます（[補正](#補正)）。取得する量と置き場の詳細は [docs/INSTALL.md](docs/INSTALL.md) にあります。
 
 文字起こしだけを入れるなら、`KIKITORI_NO_REFINE=1` を付けます（`curl -fsSL …/install.sh | KIKITORI_NO_REFINE=1 sh`。Windows の付け方は [docs/INSTALL.md](docs/INSTALL.md#導入の環境変数)）。
 
@@ -74,7 +74,7 @@ kikitori transcribe 会議.m4a --dict 辞書.tsv --format vtt     # 固有名詞
 
 ## 補正
 
-`kikitori refine` は、文字起こしの誤りを直します。同じ音声を、文字起こしとは別の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）でも文字にし、LLM にそれらを突き合わせさせて、本文を直します。LLM は、既定では手元の PC で動く Ollama を使い、指定すれば外部の LLM も使えます。用語集（`--glossary`）を渡すと、社名や製品名をその表記に直します。
+`kikitori refine` は、文字起こしの誤りを直します。同じ音声を、文字起こしとは別の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）でも文字にし、LLM にそれらを突き合わせさせて、本文を直します。LLM は、既定では手元の PC で動く Ollama を使い、指定すれば外部の LLM も使えます。kikitori は Ollama を入れも起動もしません。LLM で直すには、Ollama の案内（https://ollama.com）に従って自分で入れ、起動しておきます。Ollama が無ければ、LLM を使わない直し方になります。用語集（`--glossary`）を渡すと、社名や製品名をその表記に直します。
 
 ```bash
 kikitori refine --plan --glossary 用語集.tsv        # どう直すかだけを見る

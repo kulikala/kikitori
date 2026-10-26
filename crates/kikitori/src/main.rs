@@ -157,7 +157,7 @@ struct RefineArgs {
     force: bool,
     #[arg(
         long,
-        help = "補正の環境を作る: Ollama が無ければ入れて起こし、この PC に合うモデルと Hugging Face のモデルを取得する"
+        help = "補正のモデルを取得する: Hugging Face のモデルと、動いている Ollama にこの PC に合うモデル（Ollama は入れない）"
     )]
     setup: bool,
     #[arg(long, help = "--setup で、Hugging Face のモデルを先に取得しない")]

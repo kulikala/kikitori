@@ -72,7 +72,7 @@ LLM や道具で読むときは `--format json-v1` を使います。`schema_ver
 | 7 | `download` | 取得の失敗（空き不足を含む） | 通信の失敗なら打ち直す（続きから再開する）。`hint` が空きの不足を言うなら、利用者に空けてもらう |
 | 8 | `processing`・`internal` | 処理の失敗（`internal` は想定外の異常） | `-v` で理由を見る。直らなければ `kikitori doctor` の出力を利用者に見せる |
 | 9 | `refine` | `--external claude` に要る `claude` コマンドが無い | 了承を得て Claude Code を入れるか、利用者がよければ `--external bundle` に替える |
-| 10 | `privilege` | 管理者権限が要る（主に Linux で Ollama を入れるとき） | `hint` のコマンドを利用者に打ってもらう |
+| 10 | `privilege` | 管理者権限が要る | `hint` のコマンドを利用者に打ってもらう |
 | 11 | `memory` | メモリが足りない見込み | `--dtype fp16` を付けて打ち直す。それでも足りなければ、了承を得て `--force` |
 
 ## 結果を渡すときの注意

@@ -4,7 +4,7 @@ kikitori を入れる、更新する、取り外すときの詳しい説明で�
 
 ## 動く環境
 
-文字起こしはどの環境でも CPU で動きます。補正（`kikitori refine`）は、誤りを直す根拠にするため、同じ音声を文字起こしとは別の 2 つの音声認識モデルでも文字にします。この 2 つを B・K と呼びます。GPU を使うのは B・K だけです。補正の LLM は Ollama（手元で LLM を動かすソフト）が動かし、GPU の扱いも Ollama が決めます。GPU が無い PC でも、同じ使い方で全機能を使えます。
+文字起こしはどの環境でも CPU で動きます。補正（`kikitori refine`）は、誤りを直す根拠にするため、同じ音声を文字起こしとは別の 2 つの音声認識モデルでも文字にします。この 2 つを B・K と呼びます。GPU を使うのは B・K だけです。補正の LLM は Ollama（手元で LLM を動かすソフト）が動かし、GPU の扱いも Ollama が決めます。Ollama は利用者が自分で入れます。GPU が無い PC でも、同じ使い方で全機能を使えます。
 
 この文書と `kikitori doctor` は認識モデルを動かす装置（CPU か GPU）を計算機と呼びます。計算機は `--device` で選び、値は `auto`（既定）・`cpu`・`metal`・`cuda` です。`auto` は、Mac では Metal、CUDA 版では使えれば CUDA、それ以外では CPU を選びます。CUDA 版は NVIDIA の GPU 向けの実行ファイルで、それ以外を通常版と呼びます。
 
@@ -50,17 +50,16 @@ irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | 
 1. Python 版 0.2.x が `uv tool` で入っていれば、外してよいかを尋ねてから外します（[Python 版 0.2.x からの移行](#python-版-02x-からの移行)）。
 2. GitHub の Release から、自分の環境の実行ファイルを取得し、チェックサムを確かめて置きます。チェックサムも同じ Release から取るので、確かめられるのは取得の途中で壊れていないことです。置き場は、macOS・Linux が `~/.local/bin`、Windows が `%LOCALAPPDATA%\Programs\kikitori` です。置き場が PATH に無ければ、PATH に足します。同じ置き場に、Python 版の名前 `kikitori-refine` も置きます。0.3.x の間だけ、`kikitori refine` に転送する名前です。
 3. 文字起こしのモデル（約 750MB）と、`--dict`（固有名詞の表記を直す辞書）が語の読みを引くための形態素解析の辞書（取得は約 47MB、展開すると約 250MB）を取得します。`kikitori setup` と同じ働きです。
-4. 補正の環境を用意します。`kikitori refine --setup` と同じ働きです。Ollama が無ければ公式の導入スクリプトで入れ、この PC に合う LLM のモデルと、B・K（約 6.8GB）を取得します。LLM のモデルはどの PC でも用語の置き換えに使う小さなモデル（0.8GB）を取得します。Apple Silicon で本体のメモリが、NVIDIA で GPU のメモリが 26GB 以上ある PC では、突き合わせに使う大きなモデル（18GB）も取得します（[機器とモデルの選び方](USAGE.md#機器とモデルの選び方)）。大きなモデルまで入ると、全部で約 27GB です。
+4. 補正のモデルを取得します。`kikitori refine --setup` と同じ働きです。B・K（約 6.8GB）を取得し、Ollama が動いていれば、この PC に合う LLM のモデルも Ollama に取得させます。LLM のモデルはどの PC でも用語の置き換えに使う小さなモデル（0.8GB）を取得します。Apple Silicon で本体のメモリが、NVIDIA で GPU のメモリが 26GB 以上ある PC では、突き合わせに使う大きなモデル（18GB）も取得します（[機器とモデルの選び方](USAGE.md#機器とモデルの選び方)）。大きなモデルまで入ると、全部で約 27GB です。kikitori は Ollama を入れも起動もしません。LLM で直すには、Ollama の案内（https://ollama.com）に従って自分で入れ、起動しておきます。Ollama が無いか止まっているときは、その案内を出して B・K だけを取得します。あとで Ollama を入れて起動し、`kikitori refine --setup` を打ち直すと、LLM のモデルを取得します。
 
 置いたものは削除のために受け取り記録へ書き留めます（[削除](#削除)）。
 
-手順 3 と 4 では、取得や導入の前に、何をするか（Ollama を入れることを含む）と容量を出して確認を求めます。すでに手元にあるモデルは取得し直しません。実行ファイルを入れたあとなら、`kikitori refine --setup --dry-run` で、何が入るかを入れずに見られます。
+手順 3 と 4 では、取得の前に、何を取得するかと容量を出して確認を求めます。すでに手元にあるモデルは取得し直しません。実行ファイルを入れたあとなら、`kikitori refine --setup --dry-run` で、何が入るかを入れずに見られます。
 
 手順 3 か 4 が止まっても、導入スクリプトは「Note: kikitori setup stopped (exit 6) …」のように止まった手順と終了コードを出し、終了コード 0 で終わります。実行ファイルは入っていて、止まった手順のあとは入っていません。止まる主な場面は次のとおりです。
 
 - 確認を断ったとき、または端末が無くて確認できないとき（終了コード 6。[端末の無い環境で入れる](#端末の無い環境で入れる)）。
 - ディスクの空きが足りないとき（終了コード 7）。`kikitori setup` は約 1.6GB の空きを、`kikitori refine --setup` は取得する B・K と LLM のモデルの分の空きを、取得の前に確かめ、空きと要る量を出します。
-- Ollama の導入に管理者権限が要る環境（主に Linux）で、権限が無いとき（終了コード 10）。kikitori の導入そのものに管理者権限は要りません。打つべきコマンドが出るので、管理者権限で打ってから `kikitori refine --setup` を打ち直します。
 
 入れ終わったら、新しい端末を開いて（PATH の変更が反映されます）、1 本を起こしてみます。
 
@@ -74,7 +73,7 @@ kikitori transcribe 会議.m4a --num-speakers 4
 
 | 環境変数 | 働き |
 |---|---|
-| `KIKITORI_NO_REFINE=1` | 補正の環境（B・K、Ollama、LLM のモデル）を入れず、文字起こしだけを入れる。取得は約 800MB |
+| `KIKITORI_NO_REFINE=1` | 補正のモデル（B・K、LLM のモデル）を取得せず、文字起こしだけを入れる。取得は約 800MB |
 | `KIKITORI_VARIANT=cuda` | CUDA 版を入れる（Linux x86_64・Windows x64） |
 | `KIKITORI_VERSION` | 入れる版を決める（例 `0.3.0`。`v` は付けない） |
 | `KIKITORI_INSTALL_DIR` | 実行ファイルの置き場を変える |
@@ -124,7 +123,7 @@ kikitori uninstall             # 一覧を出し、確認のうえで消す
 
 残すもの:
 
-- Ollama 本体。要らなければ [Ollama](https://ollama.com) の案内に従って消します。
+- Ollama 本体。kikitori は Ollama を入れないので、消しもしません。
 - 利用者が自分で入れた Ollama のモデル。
 - Hugging Face のキャッシュ（`~/.cache/huggingface/hub`。`HF_HOME` や `HF_HUB_CACHE` で場所が変わります）のうち、kikitori が取得していないもの。Python 版やほかの道具が先に取得していた B・K もここに入ります。`--dry-run` の「残すもの」に場所が出るので、要らなければそのフォルダを消します。
 - 利用者が書いた辞書や用語集のファイル。

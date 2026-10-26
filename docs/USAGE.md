@@ -101,7 +101,7 @@ kikitori refine 会議.m4a --glossary 用語集.tsv --external claude   # claude
 
 - CER は 5 分・1126 字の会議録音 1 本を Apple Silicon で測った値です。`--external claude` のモデルは Claude Haiku です。幅は同じ条件で 2〜3 回測った値の幅です。直し方どうしを同じ録音で比べるための値で、ほかの録音で同じ差が出るとは限りません。[MODELS.md](MODELS.md) の文字起こしの CER とは、データも採点の仕方も違うので比べられません。
 - 表の 1 行目は、`--external` より先に当たります。B・K が無いとき、`kikitori refine` は取得してよいかを尋ね、断ると文字起こしの本文のまま出します。端末が無ければ終了コード 6 で、`--offline` なら終了コード 5 で止まります。
-- 普段の `kikitori refine` は、Ollama が止まっていても Ollama を起動しません。長さの規則に切り替え、そのことを stderr に出して、終了コード 0 で終わります。Ollama を起動するのは `kikitori refine --setup` です。
+- 普段の `kikitori refine` は、Ollama が止まっていても Ollama を起動しません。長さの規則に切り替え、そのことを stderr に出して、終了コード 0 で終わります。Ollama の起動は利用者が行います（kikitori は Ollama を入れも起動もしません）。
 - Ollama の向き先は、環境変数 `KIKITORI_OLLAMA`、それが無ければ `OLLAMA_HOST`、どちらも無ければ `localhost:11434` です。
 - merge に使うモデルは `--merge-model <名前>`（環境変数 `KIKITORI_LLM`）で決められます。
 
@@ -192,8 +192,8 @@ Claude Code や Codex のような生成 AI のエージェントに kikitori �
 | 終了コード 7 で止まった | ディスクの空きが足りないか、取得に失敗しました。空きは取得の前に確かめます。`kikitori setup` は約 1.6GB（取得する約 796MB の 2 倍）、`kikitori refine --setup` は B・K と LLM のモデルの分（最大約 26GB）を求めます。stderr に出る、空きと要る量を見て空きを作ります。通信の失敗なら、打ち直すと続きから取得します |
 | 終了コード 8 で止まった | 処理の途中で失敗しました。`-v` を付けて打ち直し、stderr の内容を見ます（導入スクリプトの 8 は、上の「another kikitori shadows」の行です） |
 | 終了コード 9 で止まった | `--external claude` を付けたのに `claude` コマンドがありません。Claude Code を入れるか、`--external` を外して手元で直します |
-| 終了コード 10 で止まった | Ollama を入れるのに管理者権限が要ります（主に Linux）。stderr に出るコマンドを管理者権限で打ってから、`kikitori refine --setup` を打ち直します |
 | 終了コード 11 で止まった | `--dtype fp16` を付けて打ち直します（[補正の速さとメモリ](#補正の速さとメモリ)） |
-| 補正が「長さの規則」で直したと出た | Ollama が答えていません。Ollama を起動するか、`kikitori refine --setup` を打ちます |
+| 補正が「長さの規則」で直したと出た | Ollama が無いか、答えていません。Ollama を自分で入れて起動し、`kikitori refine --setup` で LLM のモデルを取得します |
+| `kikitori refine --setup` が「Ollama が見つかりません」「Ollama が動いていません」と出した | kikitori は Ollama を入れも起動もしません。B・K だけを取得しました。LLM で直すには、Ollama の案内（https://ollama.com）に従って入れて起動し、`kikitori refine --setup` を打ち直します |
 | CUDA 版なのに GPU を使わない | `kikitori doctor` の `cuda:` の行を見ます。足りないものは [NVIDIA の GPU を使う](INSTALL.md#nvidia-の-gpu-を使う) の 3 つのどれかです |
 | 話者が分かれすぎる、まとまりすぎる | `--num-speakers` で人数を渡します |
