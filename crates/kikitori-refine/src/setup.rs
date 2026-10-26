@@ -355,7 +355,7 @@ pub fn say(msg: &str) {
     kikitori_core::notice::info(msg);
 }
 
-/// 入れる前の確認。/dev/tty に `[y/N]:` を出して読む。端末が無ければ false。
+/// 入れる前の確認。/dev/tty に `[y/N]:` を出して読む。ターミナルが無ければ false。
 pub fn confirm(total: u64) -> bool {
     use std::io::{Read, Write};
     let mut tty = match std::fs::OpenOptions::new()
@@ -415,18 +415,18 @@ pub fn to_exit_code(outcome: SetupOutcome) -> Result<(), CliError> {
         )),
         SetupOutcome::NoTerminal => Err(CliError::new(
             ErrorKind::NeedsConfirmation,
-            "端末が無いので確認できません。",
+            "ターミナルが無いので確認できません。",
             "入れてよければ --yes を付けて実行し直してください。",
         )),
         SetupOutcome::Declined => Err(CliError::new(
             ErrorKind::NeedsConfirmation,
             "入れる前に確認が得られませんでした。",
-            "確認に進めるには端末で同じコマンドを実行し直してください。",
+            "確認に進めるにはターミナルで同じコマンドを実行し直してください。",
         )),
     }
 }
 
-/// 実行する。確認は端末（/dev/tty）で行う。`--yes` のときは省く。
+/// 実行する。確認はターミナル（/dev/tty）で行う。`--yes` のときは省く。
 pub fn run_setup(s: &State, steps: &[Step], yes: bool, dry_run: bool) -> SetupOutcome {
     for x in steps {
         if x.kind == "note" {

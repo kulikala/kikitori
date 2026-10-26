@@ -143,7 +143,7 @@ pub fn confirm(yes: bool, prompt: &str) -> Result<bool, kikitori_core::CliError>
     if !std::io::stdin().is_terminal() {
         return Err(kikitori_core::CliError::new(
             kikitori_core::ErrorKind::NeedsConfirmation,
-            "この操作には確認が必要ですが、標準入力が端末ではありません。",
+            "この操作には確認が必要ですが、標準入力がターミナルではありません。",
             "`--yes` を付けるか、KIKITORI_YES=1 を設定して再実行してください。",
         ));
     }

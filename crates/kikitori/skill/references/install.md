@@ -25,7 +25,7 @@ LLM のモデルの大きさは PC で変わります。どの PC でも小さ�
 
 ## 入れる
 
-了承を得たら、OS と入れ方に合う 1 行を実行します。あなたの実行には端末が無く、確認で止まるので、`KIKITORI_YES=1` を付けます。
+了承を得たら、OS と入れ方に合う 1 行を実行します。あなたの実行にはターミナルが無く、確認で止まるので、`KIKITORI_YES=1` を付けます。
 
 ```bash
 curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | KIKITORI_YES=1 sh                        # macOS・Linux、補正の環境ごと
