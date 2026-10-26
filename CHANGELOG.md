@@ -15,7 +15,11 @@
 ### Fixed
 
 - `kikitori update` が、更新前の版の持つ古い SKILL.md を書き戻していた。置き換えた新しい版にスキルを書き直させる。0.3.0 から上げるときは、動くのが 0.3.0 の処理なのでスキルは古いまま残る。上げたあとで `kikitori skill install` を打ち直す。
-- macOS・Linux のインストールスクリプトが、`uv tool` で入れた Python 版を外してよいかを標準入力に尋ねていたため、`curl … | sh` の形では答えられず止まっていた。kikitori 本体の確認と同じく端末（`/dev/tty`）に尋ねる。
+- macOS・Linux のインストールスクリプトが、`uv tool` で入れた Python 版を外してよいかを標準入力に尋ねていたため、`curl … | sh` の形では答えられず止まっていた。ターミナル（`/dev/tty`）に尋ねる。
+- `kikitori setup`・`kikitori models pull`・`kikitori uninstall` などの確認が標準入力を読んでいたため、`curl … | sh` でインストールすると、文字起こしのモデルのダウンロードの確認に答えられず止まっていた。標準入力がパイプのときは、ターミナルに直接尋ねる。確認の質問の文が表示されないこともあったので、表示されるようにした。
+- `kikitori update --dry-run` が `--dry-run` を無視して更新していた。更新先の版と取得するファイルを出すだけにする。
+- `kikitori uninstall` が、B・K の Hugging Face のキャッシュで参照（snapshots）だけを消し、実体（blobs、約 6.8GB）を残していた。ほかのスナップショットが使っていない実体も消す。
+- `kikitori doctor` と `kikitori uninstall` が、Ollama の接続先を `localhost:11434`（`uninstall` は `OLLAMA_HOST` だけ）に決め打ちしていた。補正と同じく `KIKITORI_OLLAMA`、`OLLAMA_HOST`、`localhost:11434` の順に決める。
 
 ## [0.3.0] - 2026-10-26
 
