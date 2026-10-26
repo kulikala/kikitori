@@ -32,7 +32,7 @@ case "$OS:$ARCH" in
   Darwin:arm64|Darwin:aarch64) TRIPLE=aarch64-apple-darwin; CUDA=cpu ;;
   Linux:x86_64|Linux:amd64) TRIPLE=x86_64-unknown-linux-gnu ;;
   Linux:aarch64|Linux:arm64) TRIPLE=aarch64-unknown-linux-gnu; CUDA=cpu ;;
-  Darwin:x86_64) die "Intel Macs are not supported by kikitori 0.3; keep using 0.2.x (see the README)" ;;
+  Darwin:x86_64) die "Intel Macs are not supported by kikitori" ;;
   *) die "unsupported platform: $OS $ARCH" ;;
 esac
 SUFFIX=; [ "$CUDA" = cuda ] && { [ "$OS:$ARCH" = Linux:x86_64 ] || [ "$OS:$ARCH" = Linux:amd64 ] || die 'CUDA is supported only on Linux x86_64'; SUFFIX=-cuda; }

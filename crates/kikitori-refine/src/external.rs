@@ -24,7 +24,7 @@ pub fn bundle(
 ) -> Value {
     json!({
         "kind": "kikitori-refine/fixev",
-        "how": "system を指示、chunks の各 user を問いとして LLM に渡し、答え（「[番号] 本文」の行）をchunks の順につなげて kikitori refine --apply にこのファイルと一緒に渡す。",
+        "how": "system を指示、chunks の各 user をプロンプトとして LLM に渡し、応答（「[番号] 本文」の行）をchunks の順につなげて kikitori refine --apply にこのファイルと一緒に渡す。",
         "system": prompts::system("fixev", glossary),
         "chunks": prompts::chunks(a.len(), CHUNK).iter().map(|ids| {
             json!({"ids": ids, "user": prompts::user("fixev", ids, a, b, k)})

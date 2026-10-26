@@ -61,7 +61,7 @@ fn setup_without_ollama_never_installs_and_still_fetches_b_k() {
     );
     assert!(steps
         .iter()
-        .any(|x| x.text.contains("kikitori は Ollama を入れません")));
+        .any(|x| x.text.contains("Ollama が見つかりません")));
 }
 
 #[test]

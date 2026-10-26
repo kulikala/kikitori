@@ -153,7 +153,7 @@ pub fn chat(at: &str, model: &str, system: &str, user: &str) -> Result<String, S
         ],
     });
     let reply = post_json(at, "/api/chat", &body, CHAT_TIMEOUT)
-        .ok_or_else(|| "Ollama が答えません".to_owned())?;
+        .ok_or_else(|| "Ollama が応答しません".to_owned())?;
     let content = reply
         .get("message")
         .and_then(|m| m.get("content"))
@@ -165,7 +165,7 @@ pub fn chat(at: &str, model: &str, system: &str, user: &str) -> Result<String, S
 /// Ask the tev1 scorer and return the answer probabilities.
 pub fn systemone(at: &str, body: &Value) -> Result<Value, String> {
     post_json(at, "/v1/systemone", body, Duration::from_secs(120))
-        .ok_or_else(|| "Ollama が答えません".to_owned())
+        .ok_or_else(|| "Ollama が応答しません".to_owned())
 }
 
 /// Pull a model via /api/pull. Re-running resumes an interrupted pull.

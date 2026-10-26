@@ -1,6 +1,6 @@
 //! `kikitori uninstall`: kikitori が置いたものだけを、一覧を出してから消す。
 //!
-//! 消すもの: 受け取り記録にある実行ファイル・スキル・PATH の行・HF のスナップショット・Ollama のモデル、
+//! 消すもの: インストール記録にある実行ファイル・スキル・PATH の行・HF のスナップショット・Ollama のモデル、
 //! 記録が無くても既定のモデルと辞書の置き場（Python 版から移行した人のモデルもここにある）。
 //! 消さないもの: Ollama 本体、記録に無い HF のキャッシュ、利用者が自分で入れたもの。
 
@@ -36,7 +36,7 @@ fn plan(keep_models: bool) -> Plan {
             _ => {}
         }
     }
-    // 受け取り記録が無くても、既定の置き場に置かれた実行ファイル（と旧い名前の転送）は消す
+    // インストール記録が無くても、既定の置き場に置かれた実行ファイル（と旧い名前の転送）は消す
     if !p
         .paths
         .iter()
@@ -216,7 +216,7 @@ fn delete_ollama_model(name: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// Windows のインストールスクリプトはユーザーの PATH（レジストリ）にフォルダを足し、そのフォルダを受け取り記録に残す。
+/// Windows のインストールスクリプトはユーザーの PATH（レジストリ）にフォルダを足し、そのフォルダをインストール記録に残す。
 fn remove_user_path_entry(dir: &Path) {
     let quoted = dir.display().to_string().replace('\'', "''");
     let script = format!(

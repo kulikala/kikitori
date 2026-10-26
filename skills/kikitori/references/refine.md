@@ -16,7 +16,7 @@
 | `--external` を付けた | 外部の LLM が A・B・K と用語集を見て直す |
 | Ollama に突き合わせ用の大きなモデルがある | 区間ごとに、そのモデルが A・B・K を突き合わせて本文を書く |
 | Ollama に小さなモデル（tev1、0.8GB）があり、`--glossary` を付けた | 長さの規則のあと、用語集の語に置き換えるかを tev1 が選ぶ |
-| どれにも当たらない（Ollama が答えないなど） | 長さの規則。B の文字数が A の 1.6 倍＋3 文字を超える区間だけ B を採り、A が落とした発話を補う |
+| どれにも当たらない（Ollama が応答しないなど） | 長さの規則。B の文字数が A の 1.6 倍＋3 文字を超える区間だけ B を採り、A が落とした発話を補う |
 
 同じ会議録音 1 本で測った文字誤り率は、本文のままが 28.4%、外部の LLM（Claude Haiku）が約 20%、大きなモデルの突き合わせが約 22%、tev1 と長さの規則が約 25% でした。ほかの録音で同じ差が出るとは限りません。
 
@@ -33,13 +33,13 @@
 本文と用語集が、あなたの動いている LLM のサービスへ渡ります。利用者がそれでよいと言っているときだけ行います。Ollama で直すより正確になる見込みです。
 
 ```bash
-kikitori refine 会議.m4a --glossary 用語集.tsv --external bundle > 問い.json
+kikitori refine 会議.m4a --glossary 用語集.tsv --external bundle > プロンプト.json
 ```
 
-1. `問い.json` の `system` を指示として読み、`chunks` の各 `user` に答えます。答えは区間ごとに `[番号] 本文` の 1 行です。番号は `chunks[].ids` に従い（配列の添字ではありません）、行数と番号が `chunks[].ids` と一致することを確かめます。形は `kikitori schema bundle` で確かめられます。指示に書かれた規則に従い、要約・言い換え・敬語の整形はしません。
-2. 答えを `chunks` の順につないでファイルに書き、`kikitori refine --apply 問い.json --reply 答え.txt --format json-v1` を打ちます。答えの無い区間は元の本文のまま残り、stderr に警告が出ます。
+1. `プロンプト.json` の `system` を指示として読み、`chunks` の各 `user` に応答します。応答は区間ごとに `[番号] 本文` の 1 行です。番号は `chunks[].ids` に従い（配列の添字ではありません）、行数と番号が `chunks[].ids` と一致することを確かめます。形は `kikitori schema bundle` で確かめられます。指示に書かれた規則に従い、要約・言い換え・敬語の整形はしません。
+2. 応答を `chunks` の順につないでファイルに書き、`kikitori refine --apply プロンプト.json --reply 応答.txt --format json-v1` を実行します。応答の無い区間は元の本文のまま残り、stderr に警告が出ます。
 
-`--external claude` を付けると、この 2 つの手順を `claude` コマンド（Claude Haiku）が行います。本文は Anthropic のサービスへ渡るので、利用者が外部の LLM を使うと言っているときだけ打ちます。
+`--external claude` を付けると、この 2 つの手順を `claude` コマンド（Claude Haiku）が行います。本文は Anthropic のサービスへ渡るので、利用者が外部の LLM を使うと言っているときだけ実行します。
 
 `--save-evidence 根拠.json` を付けると、A・B・K の認識結果を保存します。次からは `--evidence 根拠.json` で認識を省き、直し方だけを替えて試せます。
 

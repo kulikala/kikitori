@@ -2,7 +2,7 @@
 
 kikitori が PC の外とやり取りすること、起動するプログラム、書き込むファイルの一覧です。
 
-kikitori は利用状況を送りません。アカウントも使いません。録音の音声は PC の外へ出ません。録音の文字が PC の外へ出るのは、`--external claude` を付けたときと、Ollama を別の PC に向けたときだけです。`--external bundle` は補正の問いをまとめた JSON を stdout に出すだけで、その JSON をどこへ渡すかは呼び出し元が決めます。
+kikitori は利用状況を送りません。アカウントも使いません。録音の音声は PC の外へ出ません。録音の文字が PC の外へ出るのは、`--external claude` を付けたときと、Ollama の接続先を別の PC にしたときだけです。`--external bundle` は補正のプロンプトをまとめた JSON を stdout に出すだけで、その JSON をどこへ渡すかは呼び出し元が決めます。
 
 ## 通信する先
 
@@ -31,7 +31,7 @@ kikitori は Ollama を入れも起動もせず、利用者が入れて動かし
 |---|---|---|
 | 実行ファイル | `~/.local/bin/kikitori`、`kikitori-refine` | `%LOCALAPPDATA%\Programs\kikitori` |
 | PATH の行 | シェルの設定ファイル（zsh は `~/.zshrc`、bash は `~/.bashrc`、ほかは `~/.profile`） | 利用者の環境変数 `Path` |
-| 受け取り記録（削除のために、置いたものを書き留めるファイル） | `~/.config/kikitori/receipt.txt` | `%APPDATA%\kikitori\receipt.txt` |
+| インストール記録（削除のために、置いたものを書き留めるファイル） | `~/.config/kikitori/receipt.txt` | `%APPDATA%\kikitori\receipt.txt` |
 | 文字起こしのモデル | `~/.cache/kikitori/models`（`KIKITORI_MODELS` で変更可） | `%USERPROFILE%\.cache\kikitori\models` |
 | 形態素解析の辞書 | `~/.cache/kikitori/dict` | `%USERPROFILE%\.cache\kikitori\dict` |
 | B・K | Hugging Face のキャッシュ（`~/.cache/huggingface/hub`） | 同じ |

@@ -447,7 +447,7 @@ fn detect_with_overrides() {
     let _ = BIG;
 }
 
-// --- Ollama の向き先（OLLAMA_HOST と KIKITORI_OLLAMA） ---
+// --- Ollama の接続先（OLLAMA_HOST と KIKITORI_OLLAMA） ---
 
 #[test]
 fn ollama_base_is_python_compatible() {

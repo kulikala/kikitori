@@ -1,6 +1,6 @@
 # 文字起こし
 
-## 打ち方の例
+## 実行の例
 
 ```bash
 kikitori transcribe 会議.m4a --num-speakers 4 --format json-v1 > 会議.json   # LLM や道具で読む
@@ -20,7 +20,7 @@ m4a・mp4・mp3・wav・flac・ogg は、そのまま読めます。Opus（Googl
 | 形式 | 使うとき |
 |---|---|
 | `json-v1` | LLM や道具で読むとき。`schema_version` と `segments` を持つオブジェクト |
-| `json`・`yaml` | 発言の配列が欲しい道具に渡すとき（Python 版 0.2.x と同じ形）。yaml は json より短い |
+| `json`・`yaml` | 発言の配列が欲しい道具に渡すとき（0.2.x と同じ形）。yaml は json より短い |
 | `txt`（既定） | 人が読むとき。1 行 1 発言の `[分:秒.小数] 話者N: 本文` |
 | `srt`・`vtt` | 字幕の道具に渡すとき。時刻の行と本文の行が分かれていて、発言の対応を読み取りにくいので、LLM で読むときには向かない |
 

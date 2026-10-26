@@ -175,7 +175,7 @@ struct RefineArgs {
         help = "用語集（1 行 1 語、表記<TAB>補足）。固有名詞を LLM に教える"
     )]
     glossary: Option<String>,
-    #[arg(long, default_value = "off", value_parser = ["off", "bundle", "claude"], help = "外部 LLM で直す。bundle: 問いを JSON で出し、呼び出し元の LLM が直す / claude: claude CLI に渡す")]
+    #[arg(long, default_value = "off", value_parser = ["off", "bundle", "claude"], help = "外部 LLM で直す。bundle: プロンプトを JSON で出し、呼び出し元の LLM が直す / claude: claude CLI に渡す")]
     external: String,
     #[arg(
         long,

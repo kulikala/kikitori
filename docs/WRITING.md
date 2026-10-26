@@ -7,7 +7,7 @@ kikitori の文書（README・CHANGELOG・`docs/` の文書・`skills/kikitori/S
 
 - README の読み手は利用者です。何ができるか、自分の PC で何が動くか、どう入れて、どう更新・取り外すかを知りたがっています。README は概要と入口にとどめ、インストール（`docs/INSTALL.md`）、使い方（`docs/USAGE.md`）、通信と書き込むもの（`docs/DISCLOSURES.md`）、精度とモデル（`docs/MODELS.md`）の細部はそれぞれの文書に置きます。書き方は [README-GUIDE.md](README-GUIDE.md) にあります。
 - `docs/DESIGN.md` の読み手は kikitori を直す開発者です。なぜその作りにしたかを知りたがっています。
-- `docs/RELEASING.md` の読み手は版を出す人です。何をどの順に打てばよいかを知りたがっています。
+- `docs/RELEASING.md` の読み手は版を出す人です。何をどの順に実行すればよいかを知りたがっています。
 - SKILL.md の読み手は LLM のエージェントです。利用者に代わって kikitori を正しく使うための手順と注意を求めています。
 - CHANGELOG の読み手は版を上げる利用者です。自分の使い方に響く変更を知りたがっています。
 

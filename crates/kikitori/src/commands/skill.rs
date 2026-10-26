@@ -32,7 +32,7 @@ fn destination(agent: &str, dir: Option<String>) -> PathBuf {
     })
 }
 
-/// `dir` にスキルの全ファイルを書き、受け取り記録に無いものを記録する
+/// `dir` にスキルの全ファイルを書き、インストール記録に無いものを記録する
 pub fn write_all(dir: &Path) -> Result<(), String> {
     let recorded: Vec<String> = receipt::entries()
         .into_iter()

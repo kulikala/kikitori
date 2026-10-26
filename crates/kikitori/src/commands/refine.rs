@@ -158,7 +158,7 @@ fn show(plan: &route::Plan) {
     );
 }
 
-/// 既定の指定（用語集なし、外部の LLM なし）で `kikitori refine` を打ったときに選ばれる直し方（doctor が使う）
+/// 既定の指定（用語集なし、外部の LLM なし）で `kikitori refine` を実行したときに選ばれる直し方（doctor が使う）
 pub fn outlook() -> Result<route::Plan, CliError> {
     let at = ollama::base(None);
     let tags = ollama::models(&at, ollama::SMALL_TIMEOUT);
@@ -461,7 +461,7 @@ fn tagger_for_glossary(glossary: &[(String, String)]) -> Result<Option<local::Ta
                 "用語の置き換えに必要な日本語の辞書が {} で見つかりません。",
                 dir.display()
             ),
-            format!("`kikitori setup` で辞書を入れてから、打ち直してください（{e}）"),
+            format!("`kikitori setup` で辞書を入れてから、実行し直してください（{e}）"),
         )
     })
 }
@@ -479,7 +479,7 @@ fn fetch_error(error: kikitori_fetch::FetchError) -> CliError {
         other => err(
             ErrorKind::Download,
             format!("補助モデルの取得に失敗しました: {other}"),
-            "接続を確かめて、打ち直してください（続きから取得されます）。",
+            "接続を確かめて、実行し直してください（続きから取得されます）。",
         ),
     }
 }
@@ -564,7 +564,7 @@ pub(crate) fn run(
         return Err(CliError::new(
             ErrorKind::Refine,
             "--external claude には claude コマンド（Claude Code）が要りますが、見つかりません。".to_owned(),
-            "Claude Code を入れるか、--external bundle で問いの JSON を出し、呼び出し元の LLM に渡してください。",
+            "Claude Code を入れるか、--external bundle でプロンプトの JSON を出し、呼び出し元の LLM に渡してください。",
         ));
     }
     let setup = engine_setup(args)?;

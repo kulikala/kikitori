@@ -189,7 +189,7 @@ pub fn recognize(
         CliError::new(
             ErrorKind::OfflineModel,
             "B（Qwen3-ASR）と K（kana-whisper）のモデルがありません。",
-            "ネットに繋がる状態で打ち直すか、`kikitori models pull --refine` で先に入れてください。",
+            "ネットに繋がる状態で実行し直すか、`kikitori models pull --refine` で先に入れてください。",
         )
     })?;
     let mut engine = (spec.load)(&Weights { paths: vec![dir] }, &options).map_err(ok)?;

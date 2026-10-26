@@ -19,7 +19,7 @@ pub struct State {
     pub hardware: catalog::Hardware,
     /// Qwen3-ASR と kana-whisper を動かせる（モデルがそろっている）
     pub refine: bool,
-    /// Ollama の向き先がこの PC
+    /// Ollama の接続先がこの PC
     pub local: bool,
     /// Ollama の API が答える
     pub api: bool,
@@ -103,7 +103,7 @@ pub fn plan_setup(s: &State, no_hf: bool, merge_model: Option<&str>) -> Vec<Step
     ))];
     if !s.local && !s.hardware_given {
         steps.push(Step::note(
-            "向き先の Ollama の機器が分からないので、GGUF の tev1 だけを入れます。Apple Silicon や NVIDIA なら --hardware apple / nvidia を付けてください",
+            "接続先の Ollama の機器が分からないので、GGUF の tev1 だけを入れます。Apple Silicon や NVIDIA なら --hardware apple / nvidia を付けてください",
         ));
     }
     // Ollama のモデルを取れないとき（無い・止まっている・古い）は、案内を出して B・K だけを取る
@@ -111,7 +111,7 @@ pub fn plan_setup(s: &State, no_hf: bool, merge_model: Option<&str>) -> Vec<Step
     if s.local {
         if !(s.api || s.cli || s.app) {
             steps.push(Step::note(
-                "Ollama が見つかりません。kikitori は Ollama を入れません。LLM で直すには、Ollama の案内（https://ollama.com）に従って入れ、起動してから、もう一度打ってください。それまでは LLM を使わない直し方（長さの規則）で直します",
+                "Ollama が見つかりません。LLM で直すには、Ollama（https://ollama.com）をインストールして起動してから、もう一度実行してください。それまでは LLM を使わない直し方（長さの規則）で直します",
             ));
             llm = false;
         } else if !s.api {
@@ -123,7 +123,7 @@ pub fn plan_setup(s: &State, no_hf: bool, merge_model: Option<&str>) -> Vec<Step
                 "ollama serve"
             };
             steps.push(Step::note(format!(
-                "Ollama が動いていません。起動してから（{how}）もう一度打つと、LLM のモデルも取得します。それまでは LLM を使わない直し方（長さの規則）で直します"
+                "Ollama が動いていません。起動してから（{how}）もう一度実行すると、LLM のモデルも取得します。それまでは LLM を使わない直し方（長さの規則）で直します"
             )));
             llm = false;
         } else {
@@ -131,15 +131,15 @@ pub fn plan_setup(s: &State, no_hf: bool, merge_model: Option<&str>) -> Vec<Step
         }
     } else if !s.api {
         steps.push(Step::stop(format!(
-            "向き先の Ollama（{}）が答えません。KIKITORI_OLLAMA / OLLAMA_HOST を確かめてください",
+            "接続先の Ollama（{}）が応答しません。KIKITORI_OLLAMA / OLLAMA_HOST を確かめてください",
             ollama::base(None)
         )));
         return steps;
     }
     if let Some(v) = s.version.filter(|v| *v < catalog::MIN_OLLAMA) {
-        let whose = if s.local { "" } else { "向き先の " };
+        let whose = if s.local { "" } else { "接続先の " };
         steps.push(Step::note(format!(
-            "{whose}Ollama {} は古く、{} 以上が要ります。Ollama の案内に従って更新してから、もう一度打ってください。それまでは LLM のモデルを取得しません",
+            "{whose}Ollama {} は古く、{} 以上が要ります。Ollama の案内に従って更新してから、もう一度実行してください。それまでは LLM のモデルを取得しません",
             version_text(v),
             version_text(catalog::MIN_OLLAMA)
         )));
@@ -298,7 +298,7 @@ pub fn gather(hardware_flag: Option<&str>) -> Result<State, CliError> {
         catalog::Hardware {
             kind: "cpu",
             memory: None,
-            why: "向き先の機器が分からない".to_owned(),
+            why: "接続先の機器が分からない".to_owned(),
         }
     };
     let refine = evidence::available();
@@ -406,22 +406,22 @@ pub fn to_exit_code(outcome: SetupOutcome) -> Result<(), CliError> {
         SetupOutcome::Failed => Err(CliError::new(
             ErrorKind::Processing,
             "補正の環境づくりに失敗しました。",
-            "同じコマンドを打ち直すと、済んだところは飛ばし、取得は続きから進みます。",
+            "同じコマンドを実行し直すと、済んだところは飛ばし、取得は続きから進みます。",
         )),
         SetupOutcome::Stopped => Err(CliError::new(
             ErrorKind::Dependency,
             "補正に必要なものが足りません。",
-            "上に出た手順を行ってから、同じコマンドを打ち直してください。",
+            "上に出た手順を行ってから、同じコマンドを実行し直してください。",
         )),
         SetupOutcome::NoTerminal => Err(CliError::new(
             ErrorKind::NeedsConfirmation,
             "端末が無いので確認できません。",
-            "入れてよければ --yes を付けて打ち直してください。",
+            "入れてよければ --yes を付けて実行し直してください。",
         )),
         SetupOutcome::Declined => Err(CliError::new(
             ErrorKind::NeedsConfirmation,
             "入れる前に確認が得られませんでした。",
-            "確認に進めるには端末で同じコマンドを打ち直してください。",
+            "確認に進めるには端末で同じコマンドを実行し直してください。",
         )),
     }
 }
@@ -467,7 +467,7 @@ pub fn run_setup(s: &State, steps: &[Step], yes: bool, dry_run: bool) -> SetupOu
         say(&format!("{} ...", x.text));
         if let Err(e) = run_step(&x) {
             say(&format!("失敗しました: {}: {e}", x.text));
-            say("同じコマンドを打ち直すと、済んだところは飛ばし、取得は続きから進みます");
+            say("同じコマンドを実行し直すと、済んだところは飛ばし、取得は続きから進みます");
             return SetupOutcome::Failed;
         }
     }

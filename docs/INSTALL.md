@@ -1,81 +1,93 @@
 # インストール・更新・削除
 
-kikitori を入れる、更新する、取り外すときの詳しい説明です。概要は [README](../README.md) にあります。
+kikitori のインストール、更新、削除の詳しい説明です。概要は [README](../README.md) にあります。
 
-## 動く環境
+## 対応環境
 
-文字起こしはどの環境でも CPU で動きます。補正（`kikitori refine`）は、誤りを直す根拠にするため、同じ音声を文字起こしとは別の 2 つの音声認識モデルでも文字にします。この 2 つを B・K と呼びます。GPU を使うのは B・K だけです。補正の LLM を手元の PC で動かすには、Ollama（手元で LLM を動かすソフト）が要ります。手元で動かす LLM は Ollama だけに対応しています。補正の LLM は Ollama が動かし、GPU の扱いも Ollama が決めます。Ollama は利用者が自分で入れます。GPU が無い PC でも、同じ使い方で全機能を使えます。
-
-この文書と `kikitori doctor` は認識モデルを動かす装置（CPU か GPU）を計算機と呼びます。計算機は `--device` で選び、値は `auto`（既定）・`cpu`・`metal`・`cuda` です。`auto` は、Mac では Metal、CUDA 版では使えれば CUDA、それ以外では CPU を選びます。CUDA 版は NVIDIA の GPU 向けの実行ファイルで、それ以外を通常版と呼びます。
-
-| OS | B・K を動かす計算機 | 確かめた範囲 |
+| OS | 文字起こし | 補正 |
 |---|---|---|
-| macOS（Apple Silicon） | Metal（Apple Silicon の GPU） | インストール、文字起こし、補正、削除 |
-| Linux arm64 | CPU | インストール、文字起こし、補正 |
-| Windows arm64 | CPU | インストール、文字起こし、削除 |
-| Linux x86_64 | CPU | 起動と文字起こし（arm64 の PC 上のエミュレーション） |
-| Windows x64 | CPU | 起動と文字起こし（arm64 の PC 上のエミュレーション） |
-| Linux x86_64・Windows x64 の CUDA 版 | CUDA（NVIDIA の GPU）。条件を満たさなければ CPU | ビルドと、GPU の無い PC で CPU に切り替わるまで。NVIDIA の GPU を積んだ PC では確かめていません |
+| macOS（Apple Silicon） | CPU | GPU（Metal） |
+| Linux x86_64 | CPU | CPU、NVIDIA の GPU（CUDA 版） |
+| Linux arm64 | CPU | CPU |
+| Windows x64 | CPU | CPU、NVIDIA の GPU（CUDA 版） |
+| Windows arm64 | CPU | CPU |
 
-Windows での補正と、x86_64 の実機での動作は確かめていません。
+Intel の Mac には対応していません。
 
-自分の PC で何が動くかは `kikitori doctor` で分かります。OS、使える計算機と既定で使う計算機、取得済みのモデルと容量、ffmpeg と Ollama の有無、補正がどの直し方になる見込みか、空きメモリを出します。`kikitori doctor --json` は機械が読む形です。
+補正（`kikitori refine`）は、同じ音声を、文字起こしとは別の 2 つの音声認識モデルでも文字起こしし、その結果を根拠にして誤りを直します。2 つのモデル、Qwen3-ASR（B）と kana-whisper（K）を、まとめて B・K と呼びます。表の補正の欄は B・K を CPU と GPU のどちらで動かすかを示しています。補正の LLM は Ollama が動かし、GPU を使うかどうかは Ollama が決めます。
+
+B・K を CPU と GPU のどちらで動かすかは、`kikitori refine` の `--device` で選べます。値は `auto`（既定）・`cpu`・`metal`・`cuda` です。`auto` は、Mac では Metal を、CUDA 版では使えれば CUDA を、それ以外では CPU を選びます。CUDA 版は NVIDIA の GPU 向けの実行ファイルで、Linux x86_64 と Windows x64 にあります。CUDA 版でない実行ファイルを、ここでは通常版と呼びます。
+
+`kikitori doctor` を実行すると、その PC の OS、使える CPU・GPU と既定で使うもの、取得済みのモデルと容量、ffmpeg と Ollama の有無、補正がどの直し方になる見込みか、空きメモリが分かります。`kikitori doctor --json` は機械が読む形で出します。
 
 ### NVIDIA の GPU を使う
 
-NVIDIA の GPU がある PC でも、既定で入るのは通常版で、B・K は CPU で動きます。GPU を使うには、インストールのときに `KIKITORI_VARIANT=cuda` を付けて CUDA 版を入れます。CUDA 版が GPU を使うには、次の 3 つがそろっている必要があります。どれかが欠けていれば、CUDA 版も CPU で動きます。
+NVIDIA の GPU がある PC でも、既定でインストールされるのは通常版で、B・K は CPU で動きます。GPU を使うには、`KIKITORI_VARIANT=cuda` を付けて CUDA 版をインストールします（[インストールの環境変数](#インストールの環境変数)）。CUDA 版が GPU を使うには、次の 3 つが要ります。どれかが欠けていると、CUDA 版も CPU で動きます。
 
-- compute capability 8.0 以上の GPU（GeForce RTX 30 系、A100 以降）。自分の GPU の値は `nvidia-smi --query-gpu=compute_cap --format=csv,noheader` で分かります（例 `8.6`）。
+- compute capability 8.0 以上の GPU（GeForce RTX 30 系、A100 以降）。GPU の値は `nvidia-smi --query-gpu=compute_cap --format=csv,noheader` で分かります（例 `8.6`）。
 - NVIDIA のドライバ。
 - CUDA 12 の cuBLAS と cuRAND（NVIDIA の計算ライブラリ）。
 
-CUDA 版を入れたあと、`kikitori doctor` の `cuda:` の行が「利用可能」なら GPU を使えます。この行はライブラリを読み込んで実際に初期化した結果です。
+CUDA 版をインストールしたあと、`kikitori doctor` の `cuda:` の行が「利用可能」なら GPU を使えます。この行はライブラリを読み込んで実際に初期化した結果です。
 
-### 読める音声
+## 必要なディスク容量
 
-m4a（AAC-LC、HE-AAC v1・v2）・mp4・mp3・wav・flac・ogg は、そのまま読めます。Google Meet の webm のような Opus の音声を読むには [ffmpeg](https://ffmpeg.org) が要ります。
+| 使う機能 | 取得するもの | 容量 |
+|---|---|---|
+| 文字起こし | 文字起こしのモデル | 約 750MB |
+| 文字起こし | 形態素解析の辞書（`--dict` が語の読みを引くのに使う） | 約 250MB（取得するのは約 47MB） |
+| 補正 | B・K | 約 6.8GB |
+| 補正 | LLM のモデル（用語の置き換えに使う小さなモデル） | 約 0.8GB |
+| 補正 | LLM のモデル（突き合わせに使う大きなモデル） | 約 18GB |
+
+- 文字起こしのモデルと辞書を取得する前に、取得する量（約 800MB）の 2 倍の空きがあるかを確かめます。
+- 大きな LLM のモデルを取得するのは、Apple Silicon の Mac で本体のメモリが、NVIDIA の GPU で GPU のメモリが 26GB 以上あるときだけです（[機器とモデルの選び方](USAGE.md#機器とモデルの選び方)）。
+- 補正まで使うと、合計で約 9GB、大きな LLM のモデルも取得する PC では約 27GB です。大きな LLM のモデルを取得するかどうかは、PC のメモリを見て自動で決まります。
+- 取得の前には、何を取得するかと容量を出して確認を求めます。すでに手元にあるモデルは取得し直しません。
+- `kikitori refine --setup --dry-run` を実行すると、その PC で補正のために取得するものと容量を、取得せずに確かめられます。
+
+保存先は [DISCLOSURES.md の書き込むもの](DISCLOSURES.md#書き込むもの) に書いてあります。
+
+## 別にインストールするソフトウェア
+
+次のソフトウェアは kikitori に含まれません。使う機能に合わせて、それぞれの案内に従ってインストールしてください。`kikitori doctor` で、ffmpeg と Ollama があるかを確かめられます。
+
+### Ollama
+
+補正で手元の PC の LLM を使うときに要ります。0.40.0 以上を使ってください。入手先は https://ollama.com です。
+
+- 補正が手元の PC で使える LLM は、Ollama のモデルだけです。LM Studio・llama.cpp・vLLM のような、OpenAI 互換の API で LLM を動かすソフトウェアには対応していません（[issue #1](https://github.com/kulikala/kikitori/issues/1)）。
+- kikitori は Ollama を起動しません。補正の前に Ollama を起動しておいてください。
+- LLM のモデルは、`kikitori refine --setup` が Ollama に取得させます。Ollama をあとからインストールしたときは、起動してから `kikitori refine --setup` を実行し直すと、LLM のモデルを取得します。
+- Ollama の接続先は、環境変数 `KIKITORI_OLLAMA`、それが無ければ `OLLAMA_HOST`、どちらも無ければ `localhost:11434` です。
+
+### ffmpeg
+
+Opus の音声（Google Meet の webm など）を読むときに要ります。入手先は https://ffmpeg.org です。m4a（AAC-LC、HE-AAC v1・v2）・mp4・mp3・wav・flac・ogg は、ffmpeg が無くても読めます。
+
+### Claude Code
+
+補正で `--external claude` を使うときに要ります。kikitori は Claude Code の `claude` コマンドを呼び出します。入手先は https://claude.com/claude-code です。
+
+### NVIDIA のドライバと CUDA 12 のライブラリ
+
+CUDA 版で NVIDIA の GPU を使うときに要ります。cuBLAS と cuRAND は NVIDIA の CUDA Toolkit 12（https://developer.nvidia.com/cuda-downloads）に含まれます。GPU の条件は [NVIDIA の GPU を使う](#nvidia-の-gpu-を使う) にあります。
 
 ## インストール
 
-打つ 1 行は、使う PC と、開く端末で決まります。
-
-| 使う PC | 開く端末 | 打つ 1 行 |
-|---|---|---|
-| macOS（Apple Silicon） | ターミナル | `curl` で始まる 1 行 |
-| Linux（x86_64・arm64） | 端末（bash・zsh など） | `curl` で始まる 1 行 |
-| Windows（x64・arm64） | PowerShell（スタートメニューで「PowerShell」と探して開く） | `irm` で始まる 1 行 |
-
-macOS・Linux では、次の 1 行を打ちます。
+macOS/Linux でのインストール方法:
 
 ```bash
 curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | sh
 ```
 
-Windows では、PowerShell で次の 1 行を打ちます。`irm` は PowerShell のコマンドなので、コマンドプロンプト（`cmd`）では動きません。Git Bash のような Windows 上の bash で `curl` の 1 行を打っても、対応していない環境として止まります。
+Windows でのインストール方法（PowerShell）:
 
 ```powershell
 irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex
 ```
 
-Intel の Mac には対応していません（[Intel の Mac](#intel-の-mac)）。
-
-インストールスクリプトは次の順に進みます。
-
-1. Python 版 0.2.x が `uv tool` で入っていれば、外してよいかを尋ねてから外します（[Python 版 0.2.x からの移行](#python-版-02x-からの移行)）。
-2. GitHub の Release から、自分の環境の実行ファイルを取得し、チェックサムを確かめて置きます。チェックサムも同じ Release から取るので、確かめられるのは取得の途中で壊れていないことです。置き場は、macOS・Linux が `~/.local/bin`、Windows が `%LOCALAPPDATA%\Programs\kikitori` です。置き場が PATH に無ければ、PATH に足します。同じ置き場に、Python 版の名前 `kikitori-refine` も置きます。0.3.x の間だけ、`kikitori refine` に転送する名前です。
-3. 文字起こしのモデル（約 750MB）と、`--dict`（固有名詞の表記を直す辞書）が語の読みを引くための形態素解析の辞書（取得は約 47MB、展開すると約 250MB）を取得します。`kikitori setup` と同じ働きです。
-4. 補正のモデルを取得します。`kikitori refine --setup` と同じ働きです。B・K（約 6.8GB）を取得し、Ollama が動いていれば、この PC に合う LLM のモデルも Ollama に取得させます。LLM のモデルはどの PC でも用語の置き換えに使う小さなモデル（0.8GB）を取得します。Apple Silicon で本体のメモリが、NVIDIA で GPU のメモリが 26GB 以上ある PC では、突き合わせに使う大きなモデル（18GB）も取得します（[機器とモデルの選び方](USAGE.md#機器とモデルの選び方)）。大きなモデルまで入ると、全部で約 27GB です。kikitori は Ollama を入れも起動もしません。LLM で直すには、Ollama の案内（https://ollama.com）に従って自分で入れ、起動しておきます。Ollama が無いか止まっているときは、その案内を出して B・K だけを取得します。あとで Ollama を入れて起動し、`kikitori refine --setup` を打ち直すと、LLM のモデルを取得します。
-
-置いたものは削除のために受け取り記録へ書き留めます（[削除](#削除)）。
-
-手順 3 と 4 では、取得の前に、何を取得するかと容量を出して確認を求めます。すでに手元にあるモデルは取得し直しません。実行ファイルを入れたあとなら、`kikitori refine --setup --dry-run` で、何が入るかを入れずに見られます。
-
-手順 3 か 4 が止まっても、インストールスクリプトは「Note: kikitori setup stopped (exit 6) …」のように止まった手順と終了コードを出し、終了コード 0 で終わります。実行ファイルは入っていて、止まった手順のあとは入っていません。止まる主な場面は次のとおりです。
-
-- 確認を断ったとき、または端末が無くて確認できないとき（終了コード 6。[端末の無い環境で入れる](#端末の無い環境で入れる)）。
-- ディスクの空きが足りないとき（終了コード 7）。`kikitori setup` は約 1.6GB の空きを、`kikitori refine --setup` は取得する B・K と LLM のモデルの分の空きを、取得の前に確かめ、空きと要る量を出します。
-
-入れ終わったら、新しい端末を開いて（PATH の変更が反映されます）、1 本を起こしてみます。
+管理者権限は要りません。インストールが終わったら、新しい端末を開いて（PATH の変更が反映されます）、次のように実行します。
 
 ```bash
 kikitori transcribe 会議.m4a --num-speakers 4
@@ -83,90 +95,82 @@ kikitori transcribe 会議.m4a --num-speakers 4
 
 ### インストールの環境変数
 
-macOS・Linux では、環境変数をパイプの先の `sh` の前に付けます。
+macOS/Linux では環境変数をパイプの先の `sh` の前に付けます。
 
 ```bash
 curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | KIKITORI_NO_REFINE=1 sh
 ```
 
-Windows では、先に環境変数を設定してから、インストールの 1 行を打ちます。
+Windows では先に環境変数を設定してから、インストールのコマンドを実行します。
 
 ```powershell
 $env:KIKITORI_NO_REFINE = "1"
 irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex
 ```
 
-設定できる環境変数は次のとおりです。
-
 | 環境変数 | 働き |
 |---|---|
-| `KIKITORI_NO_REFINE=1` | 補正のモデル（B・K、LLM のモデル）を取得せず、文字起こしだけを入れる。取得は約 800MB |
-| `KIKITORI_VARIANT=cuda` | CUDA 版を入れる（Linux x86_64・Windows x64） |
-| `KIKITORI_VERSION` | 入れる版を決める（例 `0.3.0`。`v` は付けない） |
+| `KIKITORI_NO_REFINE=1` | 補正のモデル（B・K、LLM のモデル）を取得せず、文字起こしだけをインストールする |
+| `KIKITORI_VARIANT=cuda` | CUDA 版をインストールする（Linux x86_64・Windows x64） |
+| `KIKITORI_VERSION` | インストールする版を指定する（例 `0.3.0`。`v` は付けない） |
 | `KIKITORI_INSTALL_DIR` | 実行ファイルの置き場を変える |
 | `KIKITORI_NO_MODIFY_PATH=1` | PATH を書き換えない |
 | `KIKITORI_YES=1` | 確認を省く（端末の無い環境向け） |
 
-文字起こしだけを使うなら、補正の環境は要りません。あとから補正を足すときは `kikitori refine --setup` を打ちます。`kikitori refine --setup --no-hf` は B・K を取得せずに残りを用意し、B・K は初めて補正するときに取得してよいかを尋ねます。B・K だけを取得するには `kikitori models pull --refine` を打ちます。
+### あとから補正を使う
 
-### 端末の無い環境で入れる
+`KIKITORI_NO_REFINE=1` でインストールしたあとで補正を使うときは、`kikitori refine --setup` を実行します。`kikitori refine --setup --no-hf` は、B・K を取得せずに、LLM のモデルだけを用意します。そのときの B・K は初めて補正するときに取得してよいかを尋ねます。B・K だけを取得するには、`kikitori models pull --refine` を実行します。
 
-kikitori の確認は、標準入力ではなく端末に直接尋ねます（macOS・Linux は `/dev/tty`、Windows は `CON`）。インストールスクリプトが Python 版を外してよいかを尋ねる問いも同じです。そのため、人が自分の端末でインストールの 1 行を打てば、パイプで渡していても確認に答えられます。
+### 端末の無い環境でインストールする
 
-エージェントの実行、コンテナ、CI のように端末が無い環境では、確認を待たずに終了コード 6 で止まり、インストールスクリプトは上のとおり終了コード 0 で終わります。端末の無い環境では、`KIKITORI_YES=1` を付けてインストールの 1 行を打つか、あとから `kikitori --yes setup`（補正も使うなら続けて `kikitori refine --setup --yes`）を打ちます。インストールが済んだかは、インストールスクリプトの終了コードでは分からないので、`kikitori doctor` で確かめます。
+kikitori が取得や削除の前に出す確認の質問は、標準入力ではなく端末に直接出ます（macOS・Linux は `/dev/tty`、Windows は `CON`）。そのため、人が自分の端末でインストールのコマンドを実行すれば、パイプで渡していても確認の質問に答えられます。
 
-### Intel の Mac
-
-Intel の Mac 向けの実行ファイルはなく、インストールスクリプトは「Intel Macs are not supported by kikitori 0.3」と出して止まります。Intel の Mac では Python 版 0.2.x を使ってください。初めて入れるときは次の 1 行です。
-
-```bash
-curl -fsSL https://github.com/kulikala/kikitori/releases/download/v0.2.1/install.sh | sh
-```
+エージェントの実行、コンテナ、CI のように端末が無い環境では、確認の質問に答えられないので、モデルを取得せずに実行ファイルだけがインストールされます。モデルまで取得するには、`KIKITORI_YES=1` を付けてインストールのコマンドを実行するか、あとから `kikitori --yes setup`（文字起こしのモデルを取得する。補正も使うなら、続けて `kikitori refine --setup --yes`）を実行します。インストールスクリプトは、モデルの取得が済まなくても終了コード 0 で終わります。何がインストールされたかは、`kikitori doctor` で確かめます。
 
 ## 更新
 
 ```bash
-kikitori update            # 最新版へ。モデルは取り直さない
-kikitori update --dry-run  # 何を更新するかを見るだけ
+kikitori update            # 最新版に更新する。モデルは取得し直さない
+kikitori update --dry-run  # 何を更新するかを確かめるだけ
 ```
 
-`kikitori update` は、新しい版が起動しないときは元の版に戻して終わります。`kikitori skill install` で書いたスキルも、新しい版の内容に書き換えます。ただし 0.3.0 から更新したときは、スキルが 0.3.0 の内容のまま残るので、更新のあとで `kikitori skill install` を打ち直します。通常版と CUDA 版を替えるときは、`--variant cuda`（CUDA 版へ）か `--variant cpu`（通常版へ）を付けます。インストールの 1 行を打ち直しても更新できます。
+- 新しい版が起動しないときは、実行ファイルを元の版に戻します。
+- `kikitori skill install` で書き込んだスキルも、新しい版の内容に書き換えます。ただし 0.3.0 から更新したときは、スキルが 0.3.0 の内容のまま残るので、更新のあとで `kikitori skill install` を実行し直します（更新の前の版は `kikitori --version` で分かります）。
+- 通常版と CUDA 版を切り替えるときは、`--variant cuda`（CUDA 版へ）か `--variant cpu`（通常版へ）を付けます。
+- インストールのコマンドを実行し直しても更新できます。
 
 ## 削除
 
 ```bash
-kikitori uninstall --dry-run   # 消すものと残すものを一覧にするだけ
-kikitori uninstall             # 一覧を出し、確認のうえで消す
+kikitori uninstall --dry-run   # 消すものと残すものの一覧を出すだけ
+kikitori uninstall             # 一覧を出し、確認したうえで消す
 ```
 
-インストールスクリプトと kikitori は、自分が置いたものを 1 行ずつファイルに書き留めます。このファイルを受け取り記録と呼び、場所は `~/.config/kikitori/receipt.txt`（Windows は `%APPDATA%\kikitori\receipt.txt`）です。`kikitori uninstall` は、受け取り記録と既定の置き場を見て消します。
+インストールスクリプトと kikitori は、置いたものを 1 行ずつインストール記録（`receipt.txt`）に書きます。インストール記録の場所は `~/.config/kikitori/receipt.txt`（Windows は `%APPDATA%\kikitori\receipt.txt`）です。`kikitori uninstall` は、インストール記録と既定の置き場を見て消します。
 
 消すもの:
 
 - 実行ファイル（`kikitori-refine` を含む）と、PATH のために足した行（`# added by kikitori` の印が付いた行。Windows は利用者の環境変数）
 - モデルと形態素解析の辞書（`~/.cache/kikitori`。Windows は `%USERPROFILE%\.cache\kikitori`）
 - エージェント用のスキル
-- kikitori が取得した B・K と、kikitori が取得した Ollama のモデル。Ollama が止まっているときは、Ollama のモデルを消すコマンドを案内して残します
+- kikitori が取得した B・K と、kikitori が Ollama に取得させた LLM のモデル。Ollama が止まっているときは、LLM のモデルを消すコマンドを出して残します。
 
 残すもの:
 
-- Ollama 本体。kikitori は Ollama を入れないので、消しもしません。
-- 利用者が自分で入れた Ollama のモデル。
-- Hugging Face のキャッシュ（`~/.cache/huggingface/hub`。`HF_HOME` や `HF_HUB_CACHE` で場所が変わります）のうち、kikitori が取得していないもの。Python 版やほかの道具が先に取得していた B・K もここに入ります。`--dry-run` の「残すもの」に場所が出るので、要らなければそのフォルダを消します。
+- Ollama 本体と、利用者が自分で取得した Ollama のモデル。
+- Hugging Face のキャッシュ（`~/.cache/huggingface/hub`。`HF_HOME` や `HF_HUB_CACHE` で場所が変わります）のうち、kikitori が取得していないもの。ほかのツールが先に取得していた B・K もここに入ります。`--dry-run` の「残すもの」に場所が出るので、要らなければそのフォルダを消します。
 - 利用者が書いた辞書や用語集のファイル。
 
-`--keep-models` を付けると、モデル・形態素解析の辞書・B・K・Ollama のモデルを残し、実行ファイル、スキル、PATH の行だけを消します。利用者が既定の置き場の外に手で置いたもので、受け取り記録に無いものは、一覧に出ず、消えません。消す前に `--dry-run` の一覧を確かめてください。
+`--keep-models` を付けると、モデル・形態素解析の辞書・B・K・LLM のモデルを残し、実行ファイル、スキル、PATH の行だけを消します。利用者が既定の置き場の外に自分で置いたもので、インストール記録に無いものは、一覧に出ず、消えません。消す前に `--dry-run` の一覧を確かめてください。
 
-## Python 版 0.2.x からの移行
+## 旧版 0.2.x から移行する
 
-pip など `uv tool` 以外の方法で入れた Python 版は、インストールスクリプトが外しません。先に `pip uninstall kikitori` などで外します。外さないと、PATH で先に見つかる Python 版を表示して、インストールスクリプトが終了コード 8 で止まります。
+0.2.x は Python で書かれた版です。`uv tool` でインストールした 0.2.x があると、インストールスクリプトが 0.2.x をアンインストールしてよいかを尋ね、アンインストールしてから新しい実行ファイルを置きます。端末の無い環境では、`KIKITORI_YES=1` を付けて実行します。pip など `uv tool` 以外の方法でインストールした 0.2.x は、インストールスクリプトがアンインストールしないので、先に `pip uninstall kikitori` などでアンインストールしてください。
 
-Python 版を `uv tool` で入れてある PC では、インストールの 1 行で入れ替えられます。インストールスクリプトが Python 版を外してよいかを尋ね、外してから新しい実行ファイルを置きます。端末の無い環境では、`KIKITORI_YES=1` を付けて打ちます（`curl -fsSL …/install.sh | KIKITORI_YES=1 sh`）。文字起こしのモデルは置き場が同じなので、取り直しません。Python 版が取得した B・K も、Hugging Face のキャッシュにあるものをそのまま使います。
+文字起こしのモデルと B・K は 0.2.x と同じ置き場にあるので、取得し直しません。主な違いは次のとおりです。全部の一覧は [CHANGELOG.md](../CHANGELOG.md) にあります。
 
-主に変わるのは次の点です。全部の一覧は [CHANGELOG.md](../CHANGELOG.md) の移行の表にあります。
-
-- `kikitori-refine` は `kikitori refine` になります。`kikitori-refine` の名前は、0.3.x の間だけ転送する名前として残ります。
+- `kikitori-refine` は `kikitori refine` になります。`kikitori-refine` の名前は、0.3.x の間だけ `kikitori refine` に転送する名前として残ります。
 - `kikitori --setup` は `kikitori setup` に、`kikitori-refine --setup` は `kikitori refine --setup` になります。
 - 失敗の終了コードは、1 から、種類ごとの 2〜11 になります。
 - `--device` の値は `auto`・`cpu`・`metal`・`cuda` になります。文字起こしはいつも CPU で動き、GPU を使えるのは補正の B・K だけになります。
-- 認識モデルの出力は、公開の短い音声 38 本で Python 版と一致しています。録音全体の出力は完全には一致しません。音声の読み込み方が違うので区切りが変わり、本文と話者の割り当ても変わることがあります。
+- 録音全体の出力は 0.2.x と完全には一致しません。音声の読み込み方が違うので区切りが変わり、本文と話者の割り当ても変わることがあります。

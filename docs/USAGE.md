@@ -10,11 +10,11 @@ kikitori transcribe 会議.m4a --num-speakers 4 --format yaml   # 人数を決�
 kikitori transcribe 会議.m4a --dict 辞書.tsv --format vtt     # 辞書を使って WebVTT の字幕
 ```
 
-`kikitori 会議.m4a` のように `transcribe` を省いても動きます。結果は stdout に、進み具合と警告は stderr に出ます。文字起こしのモデルが無ければ、最初の `kikitori transcribe` が取得してよいかを尋ねます。先に取得しておくには `kikitori setup` を打ちます。
+`kikitori 会議.m4a` のように `transcribe` を省いても動きます。結果は stdout に、進み具合と警告は stderr に出ます。文字起こしのモデルが無ければ、最初の `kikitori transcribe` が取得してよいかを尋ねます。先に取得しておくには `kikitori setup` を実行します。
 
-次の旗はどのコマンドにも付けられます。コマンド名の前にも後にも置けます。
+次のオプションはどのコマンドにも付けられます。コマンド名の前にも後にも置けます。
 
-| 旗 | 働き |
+| オプション | 働き |
 |---|---|
 | `--yes` | 確認を省く |
 | `--dry-run` | 何をするかを出すだけで、変更しない |
@@ -34,7 +34,7 @@ kikitori transcribe 会議.m4a --dict 辞書.tsv --format vtt     # 辞書を使
 |---|---|---|
 | `txt`（既定） | 1 行 1 発言。`[分:秒.小数] 話者N: 本文` | 人が読む。細かい時刻が要らなければ、LLM に渡すのもこれで足りる |
 | `json-v1` | `schema_version` と、発言の配列 `segments` を持つオブジェクト | LLM や道具で読む。形に版がある |
-| `json` | 発言の配列 | Python 版 0.2.x と同じ形。0.2.x 向けに書いたスクリプトのために残してある |
+| `json` | 発言の配列 | 0.2.x と同じ形。0.2.x 向けに書いたスクリプトのために残してある |
 | `yaml` | json と同じ項目と値 | LLM や道具で読む。json より短い |
 | `srt` | SubRip の字幕 | 動画編集の道具 |
 | `vtt` | WebVTT の字幕。話者は `<v 話者N>` の声タグ | ブラウザや動画の道具 |
@@ -87,7 +87,7 @@ kikitori refine 会議.m4a --glossary 用語集.tsv --external claude   # claude
 
 ### 直し方は環境で決まる
 
-`kikitori refine` は、B・K のモデルの有無、付けた旗、Ollama にあるモデルを調べ、次の表の上から順に、最初に当てはまる直し方を選びます。選んだ直し方と理由は stderr に出ます。`--plan` を付けると、直し方と使うモデルを出すだけで終わります。`--plan` には本番と同じ旗を付け、本番では同じ旗から `--plan` を外して打ちます。
+`kikitori refine` は、B・K のモデルの有無、付けたオプション、Ollama にあるモデルを調べ、次の表の上から順に、最初に当てはまる直し方を選びます。選んだ直し方と理由は stderr に出ます。`--plan` を付けると、直し方と使うモデルを出すだけで終わります。`--plan` には本番と同じオプションを付け、本番では同じオプションから `--plan` を外して実行します。
 
 表の merge は突き合わせに使う大きな LLM のモデル（18GB）、fix は用語集の語に置き換えるかを選ぶ小さな LLM のモデル（0.8GB）を指します。どのモデルかは次の節の表にあります。CER は文字誤り率で、低いほど正確です。
 
@@ -97,12 +97,12 @@ kikitori refine 会議.m4a --glossary 用語集.tsv --external claude   # claude
 | `--external` を付けた | A・B・K と用語集を外部の LLM に渡して直させる | 19.1〜20.4%（`--external claude`） |
 | merge のモデルが Ollama にある | 区間ごとに、merge のモデルに A・B・K を突き合わせて本文を書かせる | 21.6〜22.4% |
 | fix のモデルが Ollama にあり、`--glossary` を付けた | 長さの規則（次の行）で A か B を選んだあと、用語集の語に置き換えるかを fix のモデルに選ばせる | 24.6〜25.0% |
-| 上のどれにも当たらない（Ollama が答えない、`--glossary` が無いなど） | 長さの規則。B の文字数が A の 1.6 倍＋3 文字を超える区間だけ B を採り、A が落とした発話を補う | 24.8〜25.2% |
+| 上のどれにも当たらない（Ollama が応答しない、`--glossary` が無いなど） | 長さの規則。B の文字数が A の 1.6 倍＋3 文字を超える区間だけ B を採り、A が落とした発話を補う | 24.8〜25.2% |
 
 - CER は 5 分・1126 字の会議録音 1 本を Apple Silicon で測った値です。`--external claude` のモデルは Claude Haiku です。幅は同じ条件で 2〜3 回測った値の幅です。直し方どうしを同じ録音で比べるための値で、ほかの録音で同じ差が出るとは限りません。[MODELS.md](MODELS.md) の文字起こしの CER とは、データも採点の仕方も違うので比べられません。
 - 表の 1 行目は、`--external` より先に当たります。B・K が無いとき、`kikitori refine` は取得してよいかを尋ね、断ると文字起こしの本文のまま出します。端末が無ければ終了コード 6 で、`--offline` なら終了コード 5 で止まります。
-- 普段の `kikitori refine` は、Ollama が止まっていても Ollama を起動しません。長さの規則に切り替え、そのことを stderr に出して、終了コード 0 で終わります。Ollama の起動は利用者が行います（kikitori は Ollama を入れも起動もしません）。
-- Ollama の向き先は、環境変数 `KIKITORI_OLLAMA`、それが無ければ `OLLAMA_HOST`、どちらも無ければ `localhost:11434` です。
+- 普段の `kikitori refine` は、Ollama が止まっていても Ollama を起動しません。長さの規則に切り替え、そのことを stderr に出して、終了コード 0 で終わります。
+- Ollama の接続先は、環境変数 `KIKITORI_OLLAMA`、それが無ければ `OLLAMA_HOST`、どちらも無ければ `localhost:11434` です。
 - merge に使うモデルは `--merge-model <名前>`（環境変数 `KIKITORI_LLM`）で決められます。
 
 ### 機器とモデルの選び方
@@ -119,14 +119,14 @@ kikitori refine 会議.m4a --glossary 用語集.tsv --external claude   # claude
 - `cpu` の機器で merge を使わないのは、CPU では 1 区間に数十秒以上かかると見込むためです（測ってはいません）。
 - Apple Silicon では MLX 版（Apple Silicon 向けの形式）を、それ以外では GGUF 版を選びます。補正の精度を測ったのは Apple Silicon の MLX 版だけで、GGUF 版、NVIDIA、Windows での精度と速さは測っていません。
 - Ollama は 0.40.0 以上が要ります。`kikitori refine --setup` は古い版を見つけると、更新の仕方を出して止まります。Ollama を勝手に更新はしません。
-- 機器の判定は、`kikitori refine` と `kikitori refine --setup` に付ける `--hardware apple|nvidia|cpu` か、環境変数 `KIKITORI_HARDWARE` で上書きできます。Ollama を別の PC に向けたときは、その PC の機器が分からないので、上書きが無ければ `cpu` として扱います。
+- 機器の判定は、`kikitori refine` と `kikitori refine --setup` に付ける `--hardware apple|nvidia|cpu` か、環境変数 `KIKITORI_HARDWARE` で上書きできます。Ollama の接続先を別の PC にしたときは、その PC の機器が分からないので、上書きが無ければ `cpu` として扱います。
 
 ### 外部の LLM で直す
 
 `--external` を付けると、本文が PC の外へ出るか、呼び出し元に渡ります。手元の PC で動かす LLM は Ollama だけに対応していて、LM Studio・llama.cpp・vLLM のような OpenAI 互換の API で動かす LLM には、今はつなぐ手段がありません（対応は [issue #1](https://github.com/kulikala/kikitori/issues/1) に積んであります）。`--external bundle` は、kikitori を呼んだエージェントが自分で直すための形です。
 
 - `--external claude` は、`claude` コマンド（Claude Code の CLI）に、モデル Claude Haiku で直させます。利用料は、その `claude` コマンドにログインしているアカウントに付きます。
-- `--external bundle` は、LLM への指示（`system`）と問い（`chunks[].user`）をまとめた JSON（以下、問いの JSON）を stdout に出します。kikitori を呼んだエージェントなど、呼び出し元の LLM が問いに答えます。答えの `[番号] 本文` の行（番号は問いの JSON の `chunks[].ids` にある区間の番号）をつなぎ、`kikitori refine --apply 問い.json --reply 答え.txt` に渡すと、直した結果が出ます。答えの無い区間は A のまま残り、stderr に警告が出ます。問いの JSON の形は `kikitori schema bundle` で分かります。
+- `--external bundle` は、LLM への指示（`system`）と、区間ごとの修正の依頼（`chunks[].user`）をまとめた JSON（以下、プロンプトの JSON）を stdout に出します。kikitori を呼んだエージェントなど、呼び出し元の LLM がこのプロンプトに応答します。応答の `[番号] 本文` の行（番号はプロンプトの JSON の `chunks[].ids` にある区間の番号）をつなぎ、`kikitori refine --apply プロンプト.json --reply 応答.txt` に渡すと、直した結果が出ます。応答の無い区間は A のまま残り、stderr に警告が出ます。プロンプトの JSON の形は `kikitori schema bundle` で分かります。
 
 `--save-evidence 根拠.json` で A・B・K の認識結果を保存しておくと、次からは `--evidence 根拠.json` で認識を省き、直し方だけを替えて試せます。
 
@@ -151,7 +151,7 @@ B と K を CPU で動かしたときの時間です。音声は、公開の短�
 Claude Code や Codex のような生成 AI のエージェントに kikitori を任せるための仕組みです。
 
 - **スキル。** `kikitori skill install` が、kikitori の使い方を書いた手順書（SKILL.md）をエージェントのスキルの置き場に書きます。書き込む前の確認はありません。既定は Claude Code（`~/.claude/skills/kikitori`）で、`--agent codex` なら Codex（`~/.codex/skills/kikitori`）です。置き場は `kikitori skill path` で分かり、`kikitori skill uninstall` で消せます。同じ手順書が、このリポジトリの `skills/kikitori/` にもあります。
-- **機械が読むログ。** `--log-format json`（環境変数 `KIKITORI_LOG_FORMAT`）を付けると、stderr が 1 行 1 件の JSON になります。各行の `type` は `progress`・`info`・`warning`・`error`・`summary` のどれかです。`error` の行は、`code`（下の表の名前）、`message`、`hint`（次に打つとよいコマンド）を持ちます。stdout には、選んだ形式の結果だけが出ます。
+- **機械が読むログ。** `--log-format json`（環境変数 `KIKITORI_LOG_FORMAT`）を付けると、stderr が 1 行 1 件の JSON になります。各行の `type` は `progress`・`info`・`warning`・`error`・`summary` のどれかです。`error` の行は、`code`（下の表の名前）、`message`、`hint`（次に実行するとよいコマンド）を持ちます。stdout には、選んだ形式の結果だけが出ます。
 - **JSON の形。** `kikitori schema <名前>` が JSON Schema を出します。名前は `transcript`（json・yaml の形）・`transcript-v1`（json-v1 の形）・`bundle`・`doctor`・`engines` です。
 - **確認。** モデルの取得、補正の環境のインストール、削除、更新の前には確認が出ます。端末が無いときは答えを待たずに終了コード 6 で止まり、`--yes` を案内します。`--dry-run` で、何をするかと容量を先に見られます。
 
@@ -178,22 +178,21 @@ Claude Code や Codex のような生成 AI のエージェントに kikitori �
 | 起きたこと | どうするか |
 |---|---|
 | インストールの直後に `kikitori` が見つからない | 新しい端末を開きます。PATH の変更は、新しく開いた端末から効きます |
-| インストールスクリプトが「Note: kikitori setup stopped (exit …)」と出した | 実行ファイルだけが入り、モデルも補正の環境も入っていません。出た終了コードの行を下の表で見て対処し、`kikitori setup` を打ち直します。補正も使うなら、続けて `kikitori refine --setup` を打ちます（[インストール](INSTALL.md#インストール)） |
-| インストールスクリプトが「Note: kikitori refine --setup stopped (exit …)」と出した | 文字起こしは使えます。補正の環境が途中までです。出た終了コードの行を下の表で見て対処し、`kikitori refine --setup` を打ち直します |
-| インストールスクリプトが「another kikitori shadows the installed binary」と出して終了コード 8 で止まった | pip など `uv tool` 以外で入れた Python 版が、PATH で先に見つかっています。`pip uninstall kikitori` などで外してから、インストールの 1 行を打ち直します |
-| インストールスクリプトが「Python kikitori found in uv; rerun with KIKITORI_YES=1」と出した | `uv tool` で入れた Python 版を外してよいかを尋ねたいのに、端末がありません（エージェントや CI での実行）。外してよければ `curl -fsSL …/install.sh \| KIKITORI_YES=1 sh` と打ち直します（[Python 版 0.2.x からの移行](INSTALL.md#python-版-02x-からの移行)） |
-| インストールスクリプトが「installation cancelled」と出した | Python 版を外す問いに「いいえ」と答えたので止まりました。外してよければ打ち直して「y」と答えます |
-| インストールスクリプトが「Intel Macs are not supported by kikitori 0.3」と出した | Intel の Mac では Python 版 0.2.x を使います（[Intel の Mac](INSTALL.md#intel-の-mac)） |
-| 終了コード 2 で止まった | 旗や値の誤りです。`kikitori <コマンド> --help` で書き方を確かめます |
-| 終了コード 3 で止まった | 音声のファイルが無いか、読めない形式です。パスと形式（[読める音声](INSTALL.md#読める音声)）を確かめます |
-| 終了コード 4 で止まった | 音声が Opus なので ffmpeg が要ります。[ffmpeg](https://ffmpeg.org) を入れて打ち直します |
+| インストールスクリプトが「Note: kikitori setup stopped (exit …)」と出した | 実行ファイルだけが入り、モデルも補正の環境も入っていません。出た終了コードの行を下の表で見て対処し、`kikitori setup` を実行し直します。補正も使うなら、続けて `kikitori refine --setup` を実行します（[インストール](INSTALL.md#インストール)） |
+| インストールスクリプトが「Note: kikitori refine --setup stopped (exit …)」と出した | 文字起こしは使えます。補正の環境が途中までです。出た終了コードの行を下の表で見て対処し、`kikitori refine --setup` を実行し直します |
+| インストールスクリプトが「another kikitori shadows the installed binary」と出して終了コード 8 で止まった | pip など `uv tool` 以外で入れた Python 版が、PATH で先に見つかっています。`pip uninstall kikitori` などで外してから、インストールのコマンドを実行し直します |
+| インストールスクリプトが「Python kikitori found in uv; rerun with KIKITORI_YES=1」と出した | `uv tool` で入れた Python 版を外してよいかを尋ねたいのに、端末がありません（エージェントや CI での実行）。外してよければ `curl -fsSL …/install.sh \| KIKITORI_YES=1 sh` と実行し直します（[旧版 0.2.x から移行する](INSTALL.md#旧版-02x-から移行する)） |
+| インストールスクリプトが「installation cancelled」と出した | Python 版を外す問いに「いいえ」と答えたので止まりました。外してよければ実行し直して「y」と答えます |
+| 終了コード 2 で止まった | オプションや値の誤りです。`kikitori <コマンド> --help` で書き方を確かめます |
+| 終了コード 3 で止まった | 音声のファイルが無いか、読めない形式です。パスと形式（[ffmpeg](INSTALL.md#ffmpeg)）を確かめます |
+| 終了コード 4 で止まった | 音声が Opus なので ffmpeg が要ります。ffmpeg をインストールして（[ffmpeg](INSTALL.md#ffmpeg)）、実行し直します |
 | 終了コード 5 で止まった | `--offline` を外すか、ネットワークにつないで取得します。文字起こしのモデルは `kikitori setup`、補正の B・K は `kikitori models pull --refine` です |
-| 終了コード 6 で止まった | 確認が要ります。人が端末で打ち直すか、`--yes` を付けて打ち直します |
-| 終了コード 7 で止まった | ディスクの空きが足りないか、取得に失敗しました。空きは取得の前に確かめます。`kikitori setup` は約 1.6GB（取得する約 796MB の 2 倍）、`kikitori refine --setup` は B・K と LLM のモデルの分（最大約 26GB）を求めます。stderr に出る、空きと要る量を見て空きを作ります。通信の失敗なら、打ち直すと続きから取得します |
-| 終了コード 8 で止まった | 処理の途中で失敗しました。`-v` を付けて打ち直し、stderr の内容を見ます（インストールスクリプトの 8 は、上の「another kikitori shadows」の行です） |
+| 終了コード 6 で止まった | 確認が要ります。人が端末で実行し直すか、`--yes` を付けて実行し直します |
+| 終了コード 7 で止まった | ディスクの空きが足りないか、取得に失敗しました。空きは取得の前に確かめます。`kikitori setup` は約 1.6GB（取得する約 796MB の 2 倍）、`kikitori refine --setup` は B・K と LLM のモデルの分（最大約 26GB）を求めます。stderr に出る、空きと要る量を見て空きを作ります。通信の失敗なら、実行し直すと続きから取得します |
+| 終了コード 8 で止まった | 処理の途中で失敗しました。`-v` を付けて実行し直し、stderr の内容を見ます（インストールスクリプトの 8 は、上の「another kikitori shadows」の行です） |
 | 終了コード 9 で止まった | `--external claude` を付けたのに `claude` コマンドがありません。Claude Code を入れるか、`--external` を外して手元で直します |
-| 終了コード 11 で止まった | `--dtype fp16` を付けて打ち直します（[補正の速さとメモリ](#補正の速さとメモリ)） |
-| 補正が「長さの規則」で直したと出た | Ollama が無いか、答えていません。Ollama を自分で入れて起動し、`kikitori refine --setup` で LLM のモデルを取得します |
-| `kikitori refine --setup` が「Ollama が見つかりません」「Ollama が動いていません」と出した | kikitori は Ollama を入れも起動もしません。B・K だけを取得しました。LLM で直すには、Ollama の案内（https://ollama.com）に従って入れて起動し、`kikitori refine --setup` を打ち直します |
+| 終了コード 11 で止まった | `--dtype fp16` を付けて実行し直します（[補正の速さとメモリ](#補正の速さとメモリ)） |
+| 補正が「長さの規則」で直したと出た | Ollama が無いか、応答していません。Ollama をインストールして起動し（[Ollama](INSTALL.md#ollama)）、`kikitori refine --setup` で LLM のモデルを取得します |
+| `kikitori refine --setup` が「Ollama が見つかりません」「Ollama が動いていません」と出した | B・K だけを取得しました。LLM で直すには、Ollama をインストールして起動し（[Ollama](INSTALL.md#ollama)）、`kikitori refine --setup` を実行し直します |
 | CUDA 版なのに GPU を使わない | `kikitori doctor` の `cuda:` の行を見ます。足りないものは [NVIDIA の GPU を使う](INSTALL.md#nvidia-の-gpu-を使う) の 3 つのどれかです |
 | 話者が分かれすぎる、まとまりすぎる | `--num-speakers` で人数を渡します |

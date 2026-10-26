@@ -28,9 +28,9 @@ docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:latest
 cargo publish --workspace --dry-run --allow-dirty   # crates.io に出せる形か（送らない）
 ```
 
-Linux は Docker、Windows は VM で、同じ検査と資産づくりを手元で通します。GitHub Actions は公開の作業（資産を作って Release に載せる）に使い、確かめるための試し打ちには使いません。macOS ではリリースと同じスクリプトで手元の資産も作れます（後述の「手元で資産を作る」）。
+Linux は Docker、Windows は VM で、同じ検査と資産づくりを手元で通します。GitHub Actions は公開の作業（資産を作って Release に載せる）に使い、確かめるための試しの実行には使いません。macOS ではリリースと同じスクリプトで手元の資産も作れます（後述の「手元で資産を作る」）。
 
-`cargo publish --dry-run` を繰り返すと、前の回に検証で作ったものが使い回され、新しく足した関数が見つからないと出ることがあります。そのときは `target/debug/deps/` の `libkikitori_*` と、`~/.cargo/registry/src/` の中の、名前が `-` で始まる置き場（検証用に展開したもの）を消してから打ち直します。
+`cargo publish --dry-run` を繰り返すと、前の回に検証で作ったものが使い回され、新しく足した関数が見つからないと出ることがあります。そのときは `target/debug/deps/` の `libkikitori_*` と、`~/.cargo/registry/src/` の中の、名前が `-` で始まる置き場（検証用に展開したもの）を消してから実行し直します。
 
 ## 3. タグを作って push する
 
@@ -85,7 +85,7 @@ Rust は 1.94.0 を使います。workflow もこの版に固定してあり、�
 
 ## CUDA 版を手元で作る
 
-Linux x86_64 の CUDA 版は、`nvidia/cuda:12.6.3-devel-ubuntu22.04` のコンテナで作ります（GPU は要りません）。build-essential・pkg-config・cmake・git・jq・curl と Rust を入れてから、次を打ちます。compute capability は 8.0、CUDA のランタイムは静的にリンクされます。
+Linux x86_64 の CUDA 版は、`nvidia/cuda:12.6.3-devel-ubuntu22.04` のコンテナで作ります（GPU は要りません）。build-essential・pkg-config・cmake・git・jq・curl と Rust を入れてから、次を実行します。compute capability は 8.0、CUDA のランタイムは静的にリンクされます。
 
 ```bash
 ./scripts/build-release.sh x86_64-unknown-linux-gnu --cuda

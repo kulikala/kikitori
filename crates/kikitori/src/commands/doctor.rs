@@ -29,7 +29,7 @@ struct ModelRow {
 }
 #[derive(Serialize)]
 struct RefineOutlook {
-    /// 既定の指定で `kikitori refine` を打ったときの直し方（merge・fix・rule・plain）
+    /// 既定の指定で `kikitori refine` を実行したときの直し方（merge・fix・rule・plain）
     route: String,
     model: Option<String>,
     notes: Vec<String>,

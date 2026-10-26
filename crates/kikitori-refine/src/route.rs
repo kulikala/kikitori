@@ -126,7 +126,7 @@ pub fn choose(f: &Facts) -> Plan {
     }
     if !f.systemone {
         notes.push(
-            "Ollama の向き先に /v1/systemone が無いため（0.40.0 より古い）、用語の置き換えはしません"
+            "Ollama の接続先に /v1/systemone が無いため（0.40.0 より古い）、用語の置き換えはしません"
                 .to_owned(),
         );
         return Plan {

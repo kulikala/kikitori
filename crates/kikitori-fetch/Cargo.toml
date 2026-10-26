@@ -1,7 +1,7 @@
 [package]
 name = "kikitori-fetch"
 version.workspace = true
-description = "kikitori のモデルの取得とキャッシュ（Hugging Face と GitHub Release、受け取り記録）"
+description = "kikitori のモデルの取得とキャッシュ（Hugging Face と GitHub Release、インストール記録）"
 edition.workspace = true
 license.workspace = true
 
