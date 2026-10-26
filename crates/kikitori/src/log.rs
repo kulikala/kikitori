@@ -136,27 +136,59 @@ pub fn captured(line: &str) {
 }
 
 pub fn confirm(yes: bool, prompt: &str) -> Result<bool, kikitori_core::CliError> {
-    use std::io::{IsTerminal, Write};
+    use std::io::IsTerminal;
     if yes || YES.load(Ordering::Relaxed) {
         return Ok(true);
     }
-    if !std::io::stdin().is_terminal() {
-        return Err(kikitori_core::CliError::new(
-            kikitori_core::ErrorKind::NeedsConfirmation,
-            "この操作には確認が必要ですが、標準入力がターミナルではありません。",
-            "`--yes` を付けるか、KIKITORI_YES=1 を設定して再実行してください。",
-        ));
-    }
+    // `curl … | sh` のように標準入力がパイプでも、人がターミナルにいれば、ターミナルに直接尋ねる
+    let tty = if std::io::stdin().is_terminal() {
+        None
+    } else {
+        match open_tty() {
+            Some(tty) => Some(tty),
+            None => {
+                return Err(kikitori_core::CliError::new(
+                    kikitori_core::ErrorKind::NeedsConfirmation,
+                    "この操作には確認が必要ですが、ターミナルがありません。",
+                    "`--yes` を付けるか、KIKITORI_YES=1 を設定して再実行してください。",
+                ))
+            }
+        }
+    };
     if JSON.load(Ordering::Relaxed) {
         event("progress", prompt);
     } else {
-        eprint!("{prompt} [y/N] ");
-        let _ = std::io::stderr().flush();
+        crate::capture::write_text(&format!("{prompt} [y/N] "));
     }
-    let mut answer = String::new();
-    let _ = std::io::stdin().read_line(&mut answer);
+    let answer = match tty {
+        Some(mut tty) => read_line_from(&mut tty),
+        None => {
+            let mut line = String::new();
+            let _ = std::io::stdin().read_line(&mut line);
+            line
+        }
+    };
     Ok(matches!(
         answer.trim().to_ascii_lowercase().as_str(),
         "y" | "yes"
     ))
+}
+
+fn open_tty() -> Option<std::fs::File> {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .open(if cfg!(windows) { "CONIN$" } else { "/dev/tty" })
+        .ok()
+}
+
+fn read_line_from(r: &mut impl std::io::Read) -> String {
+    let mut line = Vec::new();
+    let mut byte = [0u8; 1];
+    while let Ok(1) = r.read(&mut byte) {
+        if byte[0] == b'\n' || byte[0] == b'\r' || line.len() > 128 {
+            break;
+        }
+        line.push(byte[0]);
+    }
+    String::from_utf8_lossy(&line).into_owned()
 }

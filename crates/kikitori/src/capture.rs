@@ -32,12 +32,16 @@ pub fn panic_error(detail: &str) {
 
 /// Write one line of kikitori's own output to the real stderr, past any capture in progress.
 pub fn write_line(line: &str) {
+    write_text(&format!("{line}\n"));
+}
+
+/// Write text without a trailing newline (a prompt) to the real stderr.
+pub fn write_text(text: &str) {
     #[cfg(any(unix, windows))]
     {
         let fd = ORIGINAL_STDERR.load(std::sync::atomic::Ordering::Relaxed);
         if fd >= 0 {
-            let record = format!("{line}\n");
-            let mut rest = record.as_bytes();
+            let mut rest = text.as_bytes();
             while !rest.is_empty() {
                 let written = unsafe { libc::write(fd, rest.as_ptr().cast(), rest.len() as _) };
                 if written <= 0 {
@@ -48,7 +52,9 @@ pub fn write_line(line: &str) {
             return;
         }
     }
-    let _ = writeln!(std::io::stderr(), "{line}");
+    let mut err = std::io::stderr();
+    let _ = err.write_all(text.as_bytes());
+    let _ = err.flush();
 }
 
 /// Run a native-library call with fd 2 redirected, then re-emit each captured line.

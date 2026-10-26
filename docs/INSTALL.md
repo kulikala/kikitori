@@ -11,12 +11,11 @@ kikitori のインストール、更新、削除の詳しい説明です。概�
 | Linux arm64 | CPU | CPU |
 | Windows x64 | CPU | CPU、NVIDIA の GPU（CUDA 版） |
 | Windows arm64 | CPU | CPU |
-
-Intel の Mac には対応していません。
+| macOS（Intel） | 非対応 | 非対応 |
 
 補正（`kikitori refine`）は、同じ音声を、文字起こしとは別の 2 つの音声認識モデルでも文字起こしし、その結果を根拠にして誤りを直します。2 つのモデル、Qwen3-ASR（B）と kana-whisper（K）を、まとめて B・K と呼びます。表の補正の欄は B・K を CPU と GPU のどちらで動かすかを示しています。補正の LLM は Ollama が動かし、GPU を使うかどうかは Ollama が決めます。
 
-B・K を CPU と GPU のどちらで動かすかは、`kikitori refine` の `--device` で選べます。値は `auto`（既定）・`cpu`・`metal`・`cuda` です。`auto` は、Mac では Metal を、CUDA 版では使えれば CUDA を、それ以外では CPU を選びます。CUDA 版は NVIDIA の GPU 向けの実行ファイルで、Linux x86_64 と Windows x64 にあります。CUDA 版でない実行ファイルを、ここでは通常版と呼びます。
+B・K を CPU と GPU のどちらで動かすかは、`kikitori refine` の `--device` で選べます。値は `auto`（既定）・`cpu`・`metal`・`cuda` です。`auto` は、Mac では Metal を、CUDA 版では使えれば CUDA を、それ以外では CPU を選びます。CUDA 版は NVIDIA の GPU 向けの実行ファイルで、Linux x86_64 と Windows x64 にあります。CUDA 版でない実行ファイルを、通常版と呼びます。
 
 `kikitori doctor` を実行すると、その PC の OS、使える CPU・GPU と既定で使うもの、ダウンロード済みのモデルと容量、ffmpeg と Ollama の有無、補正がどの直し方になる見込みか、空きメモリが分かります。`kikitori doctor --json` は機械が読む形で出します。
 
@@ -35,10 +34,11 @@ CUDA 版をインストールしたあと、`kikitori doctor` の `cuda:` の行
 | 機能区分 | ダウンロードするモデル | 用途 | 容量 |
 |---|---|---|---|
 | 文字起こし | 文字起こしのモデル（ReazonSpeech） | 録音を文字にする | 約 750MB |
+| 文字起こし | 日本語と英語の文字起こしのモデル（ReazonSpeech ja-en） | 日本語に英語が混ざる録音を文字にする。`--model ja-en` を初めて使うときにダウンロードする | 約 440MB（ダウンロードする量） |
 | 文字起こし | 形態素解析の辞書（unidic-lite） | `--dict` で語の読みを調べる。ダウンロードするのは約 47MB で、展開すると約 250MB になる | 約 250MB |
 | 補正 | B・K | 誤りを直す根拠にするため、同じ音声を文字起こしし直す | 約 6.8GB |
 | 補正 | 小さな LLM のモデル | 用語集の語に置き換えるかを選ぶ | 約 0.8GB |
-| 補正 | 大きな LLM のモデル | 文字起こしと B・K の認識結果を突き合わせて本文を直す。Apple Silicon の Mac で本体のメモリが、NVIDIA の GPU で GPU のメモリが 26GB 以上あるときだけダウンロードする（[機器とモデルの選び方](USAGE.md#機器とモデルの選び方)） | 約 18GB |
+| 補正 | 大きな LLM のモデル | 文字起こしと B・K の認識結果を突き合わせて本文を直す。メモリが 26GB 以上の Apple Silicon の Mac か、GPU のメモリが 26GB 以上の NVIDIA の GPU のときだけダウンロードする（[機器とモデルの選び方](USAGE.md#機器とモデルの選び方)） | 約 18GB |
 
 - 補正まで使うと、合計で約 9GB、大きな LLM のモデルもダウンロードする PC では約 27GB です。大きな LLM のモデルをダウンロードするかどうかは、表の条件に合うかで自動で決まります。
 - 文字起こしのモデルと辞書をダウンロードする前に、ダウンロードする量（約 800MB）の 2 倍の空きがあるかを確かめます。
@@ -54,7 +54,7 @@ CUDA 版をインストールしたあと、`kikitori doctor` の `cuda:` の行
 | ソフトウェア | バージョン | 要否 | 説明 |
 |---|---|---|---|
 | [Ollama](#ollama) | 0.40.0 以上 | 任意。補正で、手元の PC の LLM を使う場合に必要 | 補正の LLM を手元の PC で動かします。 |
-| [ffmpeg](#ffmpeg) | 指定なし | 任意。Opus の音声（Google Meet の webm など）を読む場合に必要 | 音声を読み込みます。 |
+| [ffmpeg](#ffmpeg) | 指定なし | 任意。kikitori が内蔵の仕組みで読めない音声（Opus の音声、Google Meet の webm、mkv・avi・mov の動画など）を読む場合に必要 | 音声を読み込みます。 |
 | [Claude Code](#claude-code) | 指定なし | 任意。補正で `--external claude` を使う場合に必要 | kikitori が `claude` コマンドを呼び出し、補正の LLM として使います。 |
 | [NVIDIA のドライバと CUDA Toolkit](#nvidia-のドライバと-cuda-toolkit) | CUDA 12 | 任意。CUDA 版で NVIDIA の GPU を使う場合に必要 | B・K を NVIDIA の GPU で動かします。 |
 
@@ -82,7 +82,7 @@ CUDA 版が使う cuBLAS と cuRAND は、NVIDIA の CUDA Toolkit 12（https://d
 
 ## インストール
 
-管理者権限は必要ありません。インストールが終わったら、新しいターミナルを開くと（PATH の変更が反映されます）、`kikitori` コマンドを使えます。
+管理者権限は必要ありません。PATH の変更は新しく開いたターミナルから反映されるので、インストールが終わったら新しいターミナルを開くと、`kikitori` コマンドを使えます。
 
 ### macOS の場合
 
@@ -110,7 +110,7 @@ irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | 
 
 ### インストールの環境変数
 
-macOS と Linux では環境変数をパイプの先の `sh` の前に付けます。
+macOS と Linux では環境変数を `| sh` の `sh` の直前に付けます。
 
 ```bash
 curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | KIKITORI_NO_REFINE=1 sh
@@ -134,11 +134,11 @@ irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | 
 
 ### あとから補正を使う
 
-`KIKITORI_NO_REFINE=1` でインストールしたあとで補正を使うときは、`kikitori refine --setup` を実行します。`kikitori refine --setup --no-hf` は、B・K をダウンロードせずに、LLM のモデルだけを用意します。そのときの B・K は初めて補正するときにダウンロードしてよいかを尋ねます。B・K だけをダウンロードするには、`kikitori models pull --refine` を実行します。
+`KIKITORI_NO_REFINE=1` でインストールしたあとで補正を使うときは、`kikitori refine --setup` を実行します。`kikitori refine --setup --no-hf`（hf は B・K の配布元の Hugging Face）は、B・K をダウンロードせずに、LLM のモデルだけを用意します。この場合、初めて補正を実行するときに、B・K をダウンロードしてよいかを尋ねられます。B・K だけをダウンロードするには、`kikitori models pull --refine` を実行します。
 
 ### ターミナルの無い環境でインストールする
 
-kikitori がダウンロードや削除の前に出す確認の質問は、標準入力ではなくターミナルに直接出ます（macOS・Linux は `/dev/tty`、Windows は `CON`）。そのため、人が自分のターミナルでインストールのコマンドを実行すれば、パイプで渡していても確認の質問に答えられます。
+kikitori がダウンロードや削除の前に出す確認の質問は、標準入力がパイプのときは、ターミナルに直接出ます。そのため、人が自分のターミナルで `curl … | sh` のようにインストールのコマンドを実行しても、確認の質問に答えられます。
 
 エージェントの実行、コンテナ、CI のようにターミナルが無い環境では、確認の質問に答えられないので、モデルをダウンロードせずに実行ファイルだけがインストールされます。モデルまでダウンロードするには、`KIKITORI_YES=1` を付けてインストールのコマンドを実行するか、あとから `kikitori --yes setup`（文字起こしのモデルをダウンロードする。補正も使うなら、続けて `kikitori refine --setup --yes`）を実行します。インストールスクリプトは、モデルのダウンロードが済まなくても終了コード 0 で終わります。何がインストールされたかは、`kikitori doctor` で確かめます。
 
@@ -150,7 +150,7 @@ kikitori update --dry-run  # 何を更新するかを確かめるだけ
 ```
 
 - 新しい版が起動しないときは、実行ファイルを元の版に戻します。
-- `kikitori skill install` で書き込んだスキルも新しい版の内容に書き換えます。ただし 0.3.0 から更新したときは、スキルが 0.3.0 の内容のまま残るので、更新のあとで `kikitori skill install` を実行し直します（更新の前の版は `kikitori --version` で分かります）。
+- `kikitori skill install` で書き込んだスキルも新しい版の内容に書き換えます。ただし 0.3.0 から更新したときは、スキルが 0.3.0 の内容のまま残るので、更新のあとで `kikitori skill install` を実行し直します。更新する前の版は更新する前に `kikitori --version` で確かめられます。
 - 通常版と CUDA 版を切り替えるときは、`--variant cuda`（CUDA 版へ）か `--variant cpu`（通常版へ）を付けます。
 - インストールのコマンドを実行し直しても更新できます。
 

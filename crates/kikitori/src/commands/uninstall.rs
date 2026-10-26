@@ -30,7 +30,15 @@ fn plan(keep_models: bool) -> Plan {
     for (kind, value) in receipt::entries() {
         match kind.as_str() {
             "bin" | "skill" => p.paths.push(PathBuf::from(value)),
-            "models-dir" | "dict" | "hf-repo" if !keep_models => p.paths.push(PathBuf::from(value)),
+            "models-dir" | "dict" if !keep_models => p.paths.push(PathBuf::from(value)),
+            "hf-repo" if !keep_models => {
+                let link = PathBuf::from(value);
+                // スナップショットのファイルは blobs への参照なので、参照先の実体も消す
+                if let Some(blob) = owned_blob(&link) {
+                    p.paths.push(blob);
+                }
+                p.paths.push(link);
+            }
             "path-line" => p.path_lines.push(PathBuf::from(value)),
             "ollama-model" if !keep_models => p.ollama_models.push(value),
             _ => {}
@@ -171,6 +179,39 @@ fn kikitori_cache_dir() -> PathBuf {
         .unwrap_or_default()
 }
 
+/// Hugging Face のキャッシュで、`link`（snapshots の下の参照）が指す blobs の実体。
+/// 同じリポジトリのほかのスナップショットからも参照されている実体は、消さないので返さない。
+fn owned_blob(link: &Path) -> Option<PathBuf> {
+    if !fs::symlink_metadata(link).ok()?.file_type().is_symlink() {
+        return None;
+    }
+    let blob = fs::canonicalize(link).ok()?;
+    let snapshots = link
+        .ancestors()
+        .find(|a| a.file_name().is_some_and(|n| n == "snapshots"))?;
+    let repo = snapshots.parent()?;
+    if !blob.starts_with(fs::canonicalize(repo.join("blobs")).ok()?) {
+        return None;
+    }
+    let mut stack = vec![snapshots.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir).ok()?.flatten() {
+            let path = entry.path();
+            if path == link {
+                continue;
+            }
+            match entry.file_type() {
+                Ok(t) if t.is_dir() => stack.push(path),
+                Ok(_) if fs::canonicalize(&path).ok().as_deref() == Some(blob.as_path()) => {
+                    return None
+                }
+                _ => {}
+            }
+        }
+    }
+    Some(blob)
+}
+
 fn remove(path: &Path) -> std::io::Result<()> {
     match fs::symlink_metadata(path) {
         Ok(m) if m.is_dir() => fs::remove_dir_all(path),
@@ -200,12 +241,7 @@ fn remove_marked_lines(rc: &Path) {
 }
 
 fn delete_ollama_model(name: &str) -> Result<(), String> {
-    let host = std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://127.0.0.1:11434".into());
-    let host = if host.starts_with("http") {
-        host
-    } else {
-        format!("http://{host}")
-    };
+    let host = kikitori_refine::ollama::base(None);
     let body = serde_json::json!({ "model": name }).to_string();
     kikitori_fetch::http_agent(Duration::from_secs(10))
         .delete(format!("{}/api/delete", host.trim_end_matches('/')))
@@ -288,6 +324,25 @@ fn remove_self(exe: &Path) {
 #[cfg(test)]
 mod tests {
     use super::remove_marked_lines;
+
+    #[cfg(unix)]
+    #[test]
+    fn blob_is_removed_only_when_no_other_snapshot_uses_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("models--a--b");
+        let (abc, def) = (repo.join("snapshots/abc"), repo.join("snapshots/def"));
+        for d in [repo.join("blobs"), abc.clone(), def.clone()] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        std::fs::write(repo.join("blobs/own"), "x").unwrap();
+        std::fs::write(repo.join("blobs/shared"), "y").unwrap();
+        std::os::unix::fs::symlink("../../blobs/own", abc.join("own.bin")).unwrap();
+        std::os::unix::fs::symlink("../../blobs/shared", abc.join("shared.bin")).unwrap();
+        std::os::unix::fs::symlink("../../blobs/shared", def.join("shared.bin")).unwrap();
+        let own = super::owned_blob(&abc.join("own.bin")).unwrap();
+        assert_eq!(own, std::fs::canonicalize(repo.join("blobs/own")).unwrap());
+        assert!(super::owned_blob(&abc.join("shared.bin")).is_none());
+    }
 
     #[test]
     fn only_marked_lines_are_removed() {

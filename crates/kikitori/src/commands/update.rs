@@ -1,7 +1,7 @@
 use crate::receipt;
 use std::{fs, path::PathBuf, process::Command};
 
-pub fn run(version: Option<String>, variant: Option<String>) -> Result<(), String> {
+pub fn run(version: Option<String>, variant: Option<String>, dry_run: bool) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let name = exe
         .file_name()
@@ -75,6 +75,14 @@ pub fn run(version: Option<String>, variant: Option<String>) -> Result<(), Strin
         "kikitori-{version}-{triple}{suffix}.{}",
         if cfg!(windows) { "zip" } else { "tar.gz" }
     );
+    if dry_run {
+        crate::log::info(&format!(
+            "{} から {version}（{}）に更新します。取得するファイル: {base}/{asset}（--dry-run なので更新しません）",
+            env!("CARGO_PKG_VERSION"),
+            if variant == "cuda" { "CUDA 版" } else { "通常版" }
+        ));
+        return Ok(());
+    }
     let tmp = std::env::temp_dir().join(format!("kikitori-update-{}", std::process::id()));
     fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
     let archive = tmp.join(&asset);

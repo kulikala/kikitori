@@ -432,7 +432,7 @@ fn main() -> ProcessExitCode {
         Command::Engines { action } => engines::run(action).map_err(errors::from_message),
         Command::Setup => setup::run(yes, cli.global.dry_run, cli.global.offline),
         Command::Update { version, variant } => {
-            update::run(version, variant).map_err(errors::from_message)
+            update::run(version, variant, cli.global.dry_run).map_err(errors::from_message)
         }
         Command::Uninstall { keep_models } => uninstall::run(keep_models, yes, cli.global.dry_run),
         Command::Skill { action } => skill::run(action).map_err(errors::from_message),

@@ -114,7 +114,7 @@ pub fn run(json: bool) -> Result<(), String> {
             version: None,
         });
     let ollama_models = kikitori_fetch::http_agent(Duration::from_secs(1))
-        .get("http://127.0.0.1:11434/api/tags")
+        .get(format!("{}/api/tags", kikitori_refine::ollama::base(None)))
         .call()
         .ok()
         .and_then(|r| r.into_body().read_to_string().ok())
@@ -340,7 +340,7 @@ fn gb(bytes: u64) -> String {
 
 fn ollama_responds() -> bool {
     kikitori_fetch::http_agent(Duration::from_secs(1))
-        .get("http://127.0.0.1:11434/api/tags")
+        .get(format!("{}/api/tags", kikitori_refine::ollama::base(None)))
         .call()
         .is_ok()
 }

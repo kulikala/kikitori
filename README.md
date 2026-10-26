@@ -17,21 +17,21 @@ kikitori の機能は文字起こしと補正の 2 つに分かれます。補�
 | 機能区分 | コマンド | 説明 |
 |---|---|---|
 | 文字起こし | `kikitori transcribe` | 録音を話者ごとに分けて文字にします。LLM は使いません。 |
-| 補正 | `kikitori refine` | 文字起こしの誤りを直します。同じ音声を別の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）でも文字起こしし、LLM でそれらを突き合わせて、誤変換や取りこぼしを直します。 |
+| 補正 | `kikitori refine` | 録音を受け取って文字起こしし、その誤りを直します。同じ音声を、文字起こしとは別の 2 つの音声認識モデル（Qwen3-ASR と kana-whisper）でも文字起こしし、LLM でそれらを突き合わせて、誤変換や取りこぼしを直します。 |
 
 ## 特長
 
 - **手元の PC で完結します。** 文字起こしも補正も既定では手元の PC で動きます。録音も文字も外へ送りません。モデルのダウンロードに、アカウントや API キーは必要ありません。
-- **Python などを用意する必要がありません。** 文字起こしに必要なのは、実行ファイル 1 つと、kikitori がダウンロードするモデルだけです。
+- **Python などを用意する必要がありません。** 文字起こしに必要なのは、kikitori の実行ファイルと、kikitori がダウンロードするモデルだけです。
 - **AI エージェントから使えます。** Claude Code・Codex 用のエージェント・スキル、JSON の出力と診断ログ、失敗の種類ごとの終了コードがあります。
 
 ## 向いている用途
 
-Web 会議や会議室で録音した日本語の会議を、あとから文字起こしする用途に向いています。出力の形式は、人が読むテキスト（既定）・json・yaml・字幕（srt・vtt）から選べます。
+Web 会議や会議室で録音した日本語の会議を、あとから文字起こしする用途に向いています。日本語に英語が混ざる会議の録音も文字起こしできます（[使い方](#文字起こし)）。出力の形式は、人が読むテキスト（既定）・json・yaml・字幕（srt・vtt）から選べます。
 
 次の用途には向きません。
 
-- 日本語以外の録音。日本語に英語が混ざる録音は、`--model ja-en` で文字起こしできます。英語だけの録音と、ほかの言語には対応していません。補正は日本語だけです。
+- 英語だけの録音や、日本語と英語以外の言語の録音。補正は日本語の録音だけに対応しています。
 - 句読点の付いた本文が必要な用途。本文に句読点は付きません。
 - 話している最中に字幕を出す用途。kikitori は録音したファイルを文字起こしします。
 - 話者に名前を付ける用途。話者は「話者1」「話者2」のような番号で出ます。
@@ -45,22 +45,22 @@ Web 会議や会議室で録音した日本語の会議を、あとから文字�
 | Linux arm64 | CPU | CPU |
 | Windows x64 | CPU | CPU、NVIDIA の GPU（CUDA 版） |
 | Windows arm64 | CPU | CPU |
+| macOS（Intel） | 非対応 | 非対応 |
 
-Intel の Mac には対応していません。
-
-表の補正の欄は、補正が使う 2 つの音声認識モデルを CPU と GPU のどちらで動かすかを示しています。補正の LLM は Ollama が動かし、GPU を使うかどうかは Ollama が決めます。NVIDIA の GPU を使うには、CUDA 版をインストールします（[NVIDIA の GPU を使う](docs/INSTALL.md#nvidia-の-gpu-を使う)）。インストールしたあとで `kikitori doctor` を実行すると、その PC で GPU を使えるか、ダウンロード済みのモデル、ffmpeg と Ollama の有無が分かります。
+表の補正の欄は、補正が使う 2 つの音声認識モデルを CPU と GPU のどちらで動かすかを示しています。補正の LLM は Ollama（[別途必要なソフトウェア](#別途必要なソフトウェア)）が動かし、GPU を使うかどうかは Ollama が決めます。NVIDIA の GPU を使うには、NVIDIA の GPU 向けの実行ファイル（CUDA 版）をインストールします（[NVIDIA の GPU を使う](docs/INSTALL.md#nvidia-の-gpu-を使う)）。インストールしたあとで `kikitori doctor` を実行すると、その PC で GPU を使えるか、ダウンロード済みのモデル、ffmpeg と Ollama の有無が分かります。
 
 ## 必要なディスク容量
 
 | 機能区分 | ダウンロードするモデル | 用途 | 容量 |
 |---|---|---|---|
 | 文字起こし | 文字起こしのモデル（ReazonSpeech） | 録音を文字にする | 約 750MB |
-| 文字起こし | 形態素解析の辞書（unidic-lite） | `--dict` で語の読みを調べる | 約 250MB |
+| 文字起こし | 日本語と英語の文字起こしのモデル（ReazonSpeech ja-en） | 日本語に英語が混ざる録音を文字にする。`--model ja-en` を初めて使うときにダウンロードする | 約 440MB（ダウンロードする量） |
+| 文字起こし | 形態素解析の辞書（unidic-lite） | `--dict` で語の読みを調べる | 約 250MB（ダウンロードする量は約 47MB） |
 | 補正 | 音声認識モデル（Qwen3-ASR と kana-whisper） | 誤りを直す根拠にするため、同じ音声を文字起こしし直す | 約 6.8GB |
 | 補正 | 小さな LLM のモデル | 用語集の語に置き換えるかを選ぶ | 約 0.8GB |
 | 補正 | 大きな LLM のモデル | 文字起こしと 2 つの認識結果を突き合わせて本文を直す。メモリが 26GB 以上の Apple Silicon の Mac か、GPU のメモリが 26GB 以上の NVIDIA の GPU のときだけダウンロードする | 約 18GB |
 
-補正まで使うと、合計で約 9GB、大きな LLM のモデルもダウンロードする PC では約 27GB です。大きな LLM のモデルをダウンロードするかどうかは、インストールのときに、表の条件に合うかで自動で決まります。保存先は [docs/DISCLOSURES.md の書き込むもの](docs/DISCLOSURES.md#書き込むもの) に書いてあります。
+文字起こしだけなら合計で約 1GB（`--model ja-en` のモデルを除く）、補正まで使うと約 9GB、大きな LLM のモデルもダウンロードする PC では約 27GB です。大きな LLM のモデルをダウンロードするかどうかは、インストールのときに、表の条件に合うかで自動で決まります。保存先は [docs/DISCLOSURES.md の書き込むもの](docs/DISCLOSURES.md#書き込むもの) に書いてあります。
 
 ## 別途必要なソフトウェア
 
@@ -68,10 +68,10 @@ Intel の Mac には対応していません。
 
 | ソフトウェア | バージョン | 要否 | 説明 |
 |---|---|---|---|
-| [Ollama](https://ollama.com) | 0.40.0 以上 | 任意。補正で、手元の PC の LLM を使う場合に必要 | 補正の LLM を手元の PC で動かします。Ollama が無いときの補正は、LLM を使わない直し方になります。 |
-| [ffmpeg](https://ffmpeg.org) | 指定なし | 任意。Opus の音声（Google Meet の webm など）を読む場合に必要 | 音声を読み込みます。m4a・mp4・mp3・wav・flac・ogg は、ffmpeg が無くても読めます。 |
+| [Ollama](https://ollama.com) | 0.40.0 以上 | 任意。補正で、手元の PC の LLM を使う場合に必要 | 補正の LLM を手元の PC で動かします。kikitori は Ollama を起動しないので、補正の前に起動しておきます。Ollama が無いときの補正は、LLM を使わない直し方になります。 |
+| [ffmpeg](https://ffmpeg.org) | 指定なし | 任意。kikitori が内蔵の仕組みで読めない音声（Opus の音声、Google Meet の webm、mkv・avi・mov の動画など）を読む場合に必要 | 音声を読み込みます。m4a・mp4・mp3・wav・flac・ogg は、ffmpeg が無くても読めます。 |
 | [Claude Code](https://claude.com/claude-code) | 指定なし | 任意。補正で `--external claude` を使う場合に必要 | kikitori が `claude` コマンドを呼び出し、補正の LLM として使います。 |
-| NVIDIA のドライバと CUDA Toolkit | CUDA 12 | 任意。CUDA 版で NVIDIA の GPU を使う場合に必要 | 補正の音声認識モデルを NVIDIA の GPU で動かします。 |
+| NVIDIA のドライバと CUDA Toolkit | CUDA 12 | 任意。CUDA 版で NVIDIA の GPU を使う場合に必要 | 補正の音声認識モデルを NVIDIA の GPU で動かします。GPU は compute capability 8.0 以上（GeForce RTX 30 系、A100 以降）が必要です。 |
 
 補正が手元の PC で使える LLM は、Ollama のモデルだけです。LM Studio・llama.cpp・vLLM のような、OpenAI 互換の API で LLM を動かすソフトウェアには対応していません（[issue #1](https://github.com/kulikala/kikitori/issues/1)）。
 
@@ -85,7 +85,7 @@ Intel の Mac には対応していません。
 curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | sh
 ```
 
-文字起こしだけを使う場合は、補正のモデルをダウンロードしない次のコマンドを実行します。
+文字起こしだけを使う場合は、補正のモデル（音声認識モデルと LLM のモデル）をダウンロードしない次のコマンドを実行します。
 
 ```bash
 curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | KIKITORI_NO_REFINE=1 sh
@@ -99,7 +99,7 @@ curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install
 curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | sh
 ```
 
-文字起こしだけを使う場合は、補正のモデルをダウンロードしない次のコマンドを実行します。
+文字起こしだけを使う場合は、補正のモデル（音声認識モデルと LLM のモデル）をダウンロードしない次のコマンドを実行します。
 
 ```bash
 curl -fsSL https://github.com/kulikala/kikitori/releases/latest/download/install.sh | KIKITORI_NO_REFINE=1 sh
@@ -113,7 +113,7 @@ PowerShell で次のコマンドを実行します。
 irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | iex
 ```
 
-文字起こしだけを使う場合は、補正のモデルをダウンロードしない次のコマンドを実行します。
+文字起こしだけを使う場合は、補正のモデル（音声認識モデルと LLM のモデル）をダウンロードしない次のコマンドを実行します。
 
 ```powershell
 $env:KIKITORI_NO_REFINE = "1"
@@ -122,7 +122,7 @@ irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | 
 
 ### インストールのあと
 
-インストールが終わったら、新しいターミナルを開くと `kikitori` コマンドを使えます。インストールの環境変数、ターミナルの無い環境（AI エージェント・CI）でのインストール、更新、削除は [docs/INSTALL.md](docs/INSTALL.md) に書いてあります。更新には `kikitori update`、削除には `kikitori uninstall` を使います。
+インストールが終わったら、新しいターミナルを開くと `kikitori` コマンドを使えます。あとから補正を使えるようにする方法、ほかのインストールのオプション（環境変数）、ターミナルの無い環境（AI エージェント・CI）でのインストール、更新、削除は [docs/INSTALL.md](docs/INSTALL.md) に書いてあります。更新には `kikitori update`、削除には `kikitori uninstall` を使います。
 
 ## 使い方
 
@@ -132,6 +132,7 @@ irm https://github.com/kulikala/kikitori/releases/latest/download/install.ps1 | 
 kikitori transcribe 会議.m4a                                  # 話者つきのテキスト
 kikitori transcribe 会議.m4a --num-speakers 4 --format yaml   # 人数を指定して YAML で出力
 kikitori transcribe 会議.m4a --dict 辞書.tsv --format vtt     # 固有名詞の辞書を使って WebVTT の字幕で出力
+kikitori transcribe 会議.m4a --model ja-en                    # 日本語に英語が混ざる録音を文字起こし
 ```
 
 人数が分かるときは、`--num-speakers` で指定してください。指定しないと、1 人を 2 人に分けたり、2 人を 1 人にまとめたりすることがあります。結果は stdout に、進み具合と警告は stderr に出ます。
@@ -174,7 +175,7 @@ cargo test --workspace                 # 通常のテスト（モデルが必要
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-ビルドの最初に、sherpa-onnx の配布物をネットワークからダウンロードします。Windows arm64 でビルドするには、Visual Studio 2026 と clang が必要です。認識・音声の読み込み・出力形式などは Rust のクレートに分かれていて、自分のプログラムから git かパスで依存できます。crates.io には公開していません。
+ビルドの最初に、音声認識の実行に使うライブラリ sherpa-onnx の配布物をネットワークからダウンロードします。Windows arm64 でビルドするには、Visual Studio 2026 と clang が必要です。認識・音声の読み込み・出力形式などは Rust のクレートに分かれていて、自分のプログラムの依存関係に、git のリポジトリかローカルのパスを指定して加えられます。crates.io には公開していません。
 
 | 文書 | 内容 |
 |---|---|
