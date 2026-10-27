@@ -67,8 +67,10 @@ if ($Cuda) {
     $env:Path = (Join-Path $env:CUDA_PATH 'bin') + ';' + $env:Path
     $CudartStatic = Join-Path $env:CUDA_PATH 'lib\x64\cudart_static.lib'
     if (-not (Test-Path $CudartStatic)) { throw "cudart_static.lib not found: $CudartStatic" }
-    $CudartDir = Join-Path ([System.IO.Path]::GetTempPath()) ("kikitori-cudart-" + [guid]::NewGuid())
-    New-Item -ItemType Directory -Path $CudartDir | Out-Null
+    # A fixed folder keeps RUSTFLAGS the same across runs: a changed RUSTFLAGS rebuilds
+    # sherpa-onnx-sys against a build-script output whose library folder rust-cache did not keep.
+    $CudartDir = Join-Path ([System.IO.Path]::GetTempPath()) 'kikitori-cudart'
+    New-Item -ItemType Directory -Force -Path $CudartDir | Out-Null
     Copy-Item $CudartStatic (Join-Path $CudartDir 'cudart.lib')
     $env:RUSTFLAGS = "$env:RUSTFLAGS -L native=$CudartDir"
 }

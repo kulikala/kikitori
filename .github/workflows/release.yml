@@ -171,6 +171,9 @@ jobs:
           "CUDA_PATH=$cuda" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Leaves behind the caches built with a per-run cudart folder in RUSTFLAGS
+          key: fixed-cudart-dir
       - name: Build, package and smoke test (cuda asset, no GPU attached)
         shell: pwsh
         run: ./scripts/build-release.ps1 -Target x86_64-pc-windows-msvc -Cuda
