@@ -421,7 +421,7 @@ fn main() -> ProcessExitCode {
                     "ファイルのパスを確認して、もう一度実行してください。",
                 ))
             } else {
-                transcribe::run(*args, yes, cli.global.offline)
+                transcribe::run(*args, yes, cli.global.dry_run, cli.global.offline)
             }
         }
         Command::Refine(args) => refine::run(&args, yes, cli.global.dry_run, cli.global.offline),

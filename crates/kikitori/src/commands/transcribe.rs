@@ -82,6 +82,7 @@ pub fn transcribe_core(
     args: &TranscribeArgs,
     yes: bool,
     offline: bool,
+    dry_run: bool,
     capture_a_waves: bool,
 ) -> Result<Option<Transcription>, CliError> {
     let root = args
@@ -104,6 +105,31 @@ pub fn transcribe_core(
     let asr_paths = kind
         .paths(&root, model, precision)
         .map_err(|message| CliError::new(ErrorKind::Usage, message, usage_hint()))?;
+
+    if dry_run {
+        log::info(&format!(
+            "入力: {}",
+            args.input.as_deref().unwrap_or_default()
+        ));
+        log::info(&format!(
+            "認識: {asr_name}（--model {model}、--precision {precision}）、話者分離: {diarizer_name}"
+        ));
+        log::info(if models_present(&root, &asr_paths) {
+            "文字起こしのモデル: 取得済み"
+        } else {
+            "文字起こしのモデル: 未取得（実行すると、確認してから取得する。量は `kikitori setup --dry-run` で分かる）"
+        });
+        if args.dictionary.is_some() {
+            let dict = kikitori_fetch::dictionary_root().join("unidic-lite-1.0.8");
+            log::info(if dict.join("sys.dic").is_file() {
+                "辞書のモデル: 取得済み"
+            } else {
+                "辞書のモデル: 未取得（実行すると、確認してから取得する）"
+            });
+        }
+        log::info("--dry-run のため、文字起こしせずに終えます");
+        return Ok(None);
+    }
 
     if !models_present(&root, &asr_paths) {
         if offline {
@@ -249,8 +275,8 @@ pub fn transcribe_core(
 }
 
 /// 中核の文字起こしを実行して、結果を書き出す。
-pub fn run(args: TranscribeArgs, yes: bool, offline: bool) -> Result<(), CliError> {
-    let Some(transcription) = transcribe_core(&args, yes, offline, false)? else {
+pub fn run(args: TranscribeArgs, yes: bool, dry_run: bool, offline: bool) -> Result<(), CliError> {
+    let Some(transcription) = transcribe_core(&args, yes, offline, dry_run, false)? else {
         return Ok(());
     };
     report_diagnostics();

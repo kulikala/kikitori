@@ -84,6 +84,23 @@ fn confirmation_without_tty_is_six_and_does_not_wait_for_stdin() {
 }
 
 #[test]
+fn transcribe_dry_run_does_not_transcribe() {
+    let (mut cmd, home) = cli();
+    let input = home.path().join("sample.wav");
+    std::fs::write(&input, b"not actually audio").unwrap();
+    let output = cmd
+        .arg("transcribe")
+        .arg(&input)
+        .arg("--dry-run")
+        .write_stdin(Vec::<u8>::new())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stdout.is_empty(), "printed a transcript");
+    assert_json_stderr(&output.stderr);
+}
+
+#[test]
 fn setup_dry_run_text_prints_the_plan() {
     let (mut cmd, _home) = cli();
     cmd.env_remove("KIKITORI_LOG_FORMAT");

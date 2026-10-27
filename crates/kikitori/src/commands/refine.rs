@@ -593,7 +593,7 @@ pub(crate) fn run(
     let evidence_given = args.evidence.is_some();
     let mut plan = route::choose(&facts(args, evidence_given || evidence::available())?);
     show(&plan);
-    if args.plan {
+    if args.plan || dry_run {
         return Ok(());
     }
     let (segs, a, b, k) = if let Some(path) = args.evidence.as_deref() {
@@ -620,6 +620,7 @@ pub(crate) fn run(
             &transcribe_args(args),
             yes,
             offline,
+            false,
             use_evidence,
         )?;
         let Some(transcription) = transcription else {
