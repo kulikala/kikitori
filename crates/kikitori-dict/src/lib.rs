@@ -330,6 +330,12 @@ impl Punctuator {
 
     /// Text that already has punctuation, and empty text, is returned unchanged.
     pub fn punctuate(&self, text: &str) -> String {
+        self.punctuate_with_pauses(text, &[])
+    }
+
+    /// Like [`Self::punctuate`], and also ends a sentence where a form that can end one is
+    /// followed by a pause. `pauses` are offsets in non-whitespace characters.
+    pub fn punctuate_with_pauses(&self, text: &str, pauses: &[usize]) -> String {
         if text.is_empty() || text.contains(['。', '、', '？', '！', '?', '!']) {
             return text.to_owned();
         }
@@ -337,8 +343,10 @@ impl Punctuator {
             return text.to_owned();
         };
         let mut out = String::with_capacity(text.len() * 4 / 3);
+        let mut offset = 0;
         for (i, w) in words.iter().enumerate() {
             out.push_str(&w.surface);
+            offset += w.surface.chars().filter(|c| !c.is_whitespace()).count();
             let Some(nxt) = words.get(i + 1) else {
                 out.push('。');
                 break;
@@ -357,8 +365,13 @@ impl Punctuator {
             let next_start = !CONT_POS1.contains(&nxt.pos1.as_str())
                 || nxt.surface == "じゃあ"
                 || nxt.surface == "じゃ";
+            // 「〜ました」のあとに名詞が来る所は、名詞を説明する形と見分けられないので、音の切れ目で決める
+            let may_end = end_aux
+                || w.pos2 == "終助詞"
+                || (w.pos1 == "助動詞" && w.cform.starts_with("連体形"));
             if ((w.pos2 == "終助詞" || end_aux) && next_start && !aux_next && nxt.pos1 != "名詞")
                 || (end_aux && matches!(nxt.pos1.as_str(), "代名詞" | "感動詞" | "接続詞" | "副詞"))
+                || (may_end && next_start && !aux_next && pauses.contains(&offset))
             {
                 out.push('。');
             } else if (w.pos1 == "感動詞" && nxt.pos1 != "感動詞")
@@ -469,6 +482,19 @@ mod tests {
             p.punctuate("今日は雨ですそれでは会議を始めます"),
             "今日は雨です。それでは会議を始めます。"
         );
+    }
+
+    #[test]
+    fn a_pause_ends_a_sentence_before_a_noun() {
+        let Some(p) = punctuator() else { return };
+        let text = "試験運用は予定どおり終わりましたユーザーからの問い合わせは減っています";
+        assert_eq!(p.punctuate(text), format!("{text}。"));
+        assert_eq!(
+            p.punctuate_with_pauses(text, &[16]),
+            "試験運用は予定どおり終わりました。ユーザーからの問い合わせは減っています。"
+        );
+        // 文末になりえない所の切れ目では切らない
+        assert_eq!(p.punctuate_with_pauses(text, &[5]), format!("{text}。"));
     }
 
     #[test]

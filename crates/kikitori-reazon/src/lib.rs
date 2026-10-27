@@ -3,7 +3,7 @@
 //! The ONNX Runtime implementation comes from the static sherpa-onnx build, so
 //! the process never carries a second copy of ONNX Runtime.
 
-use kikitori_core::{AsrEngine, AsrOutput, AsrRequest, Capabilities, DType, Token};
+use kikitori_core::{AsrEngine, AsrOutput, AsrRequest, Capabilities, DType, Token, SAMPLE_RATE};
 use ndarray::{Array1, Array2, ArrayD, Axis};
 use ort::{
     environment::Environment,
@@ -171,7 +171,8 @@ impl Reazon {
             .map_err(string)
     }
 
-    fn transcribe_one(&mut self, wave: &[f32]) -> Result<String, String> {
+    /// Text and the tokens with the time (seconds into `wave`) of the frame that emitted each.
+    fn transcribe_one(&mut self, wave: &[f32]) -> Result<(String, Vec<Token>), String> {
         let features = fbank(wave)?;
         let frames = features.nrows();
         let encoded = {
@@ -190,7 +191,9 @@ impl Reazon {
                 .to_owned()
         };
 
-        let mut beams: Vec<((i64, i64), Vec<i64>, f64)> = vec![((0, 0), Vec::new(), 0.0)];
+        // (context, tokens, frame of each token, score)
+        type Beam = ((i64, i64), Vec<i64>, Vec<usize>, f64);
+        let mut beams: Vec<Beam> = vec![((0, 0), Vec::new(), Vec::new(), 0.0)];
         for frame in 0..encoded.nrows() {
             let contexts: Vec<(i64, i64)> = beams.iter().map(|beam| beam.0).collect();
             let mut decoder_rows = Vec::with_capacity(contexts.len());
@@ -207,10 +210,10 @@ impl Reazon {
                 });
             let logits = self.joiner_logits(&encoded_matrix, &decoder_matrix)?;
 
-            let mut candidates: Vec<((i64, i64), Vec<i64>, f64)> = Vec::new();
+            let mut candidates: Vec<Beam> = Vec::new();
             let mut candidate_indexes: HashMap<(i64, i64), usize> = HashMap::new();
             for (row_index, context) in contexts.iter().enumerate() {
-                let (_, sequence, base) = &beams[row_index];
+                let (_, sequence, times, base) = &beams[row_index];
                 let row = logits.row(row_index);
                 let norm = row.iter().copied().fold(f32::NEG_INFINITY, log_add_f32);
                 let mut ids: Vec<usize> = (0..row.len()).collect();
@@ -220,43 +223,63 @@ impl Reazon {
                 }
                 for &token in &ids[..take] {
                     let score = base + f64::from(row[token] - norm);
-                    let (key, next) = if token == 0 {
-                        (*context, sequence.clone())
+                    let (key, next, next_times) = if token == 0 {
+                        (*context, sequence.clone(), times.clone())
                     } else {
                         let mut next = sequence.clone();
                         next.push(token as i64);
-                        ((context.1, token as i64), next)
+                        let mut next_times = times.clone();
+                        next_times.push(frame);
+                        ((context.1, token as i64), next, next_times)
                     };
                     if let Some(&index) = candidate_indexes.get(&key) {
-                        if candidates[index].2 < score {
+                        if candidates[index].3 < score {
                             candidates[index].1 = next;
+                            candidates[index].2 = next_times;
                         }
-                        candidates[index].2 = log_add(candidates[index].2, score);
+                        candidates[index].3 = log_add(candidates[index].3, score);
                     } else {
                         candidate_indexes.insert(key, candidates.len());
-                        candidates.push((key, next, score));
+                        candidates.push((key, next, next_times, score));
                     }
                 }
             }
-            candidates.sort_by(|a, b| b.2.total_cmp(&a.2));
+            candidates.sort_by(|a, b| b.3.total_cmp(&a.3));
             beams = candidates.into_iter().take(self.beam).collect();
         }
 
-        let mut best: Option<&((i64, i64), Vec<i64>, f64)> = None;
+        let mut best: Option<&Beam> = None;
         for beam in &beams {
-            if best.is_none_or(|current| beam.2 > current.2) {
+            if best.is_none_or(|current| beam.3 > current.3) {
                 best = Some(beam);
             }
         }
-        let sequence = best.map_or(&[][..], |beam| beam.1.as_slice());
-        Ok(sequence
+        let (sequence, times) = best.map_or((&[][..], &[][..]), |beam| {
+            (beam.1.as_slice(), beam.2.as_slice())
+        });
+        let seconds_per_frame =
+            wave.len() as f32 / SAMPLE_RATE as f32 / encoded.nrows().max(1) as f32;
+        let tokens: Vec<Token> = sequence
             .iter()
-            .filter_map(|&index| self.tokens.get(index as usize))
-            .cloned()
+            .zip(times)
+            .filter_map(|(&index, &frame)| {
+                let text = self.tokens.get(index as usize)?.replace('▁', " ");
+                let start = frame as f32 * seconds_per_frame;
+                Some(Token {
+                    text,
+                    start,
+                    end: start + seconds_per_frame,
+                    confidence: None,
+                })
+            })
+            .collect();
+        let text = tokens
+            .iter()
+            .map(|token| token.text.as_str())
             .collect::<String>()
-            .replace('▁', " ")
             .trim()
-            .to_owned())
+            .to_owned();
+        Ok((text, tokens))
     }
 }
 
@@ -273,10 +296,8 @@ impl AsrEngine for Reazon {
         requests
             .iter()
             .map(|request| {
-                Ok(AsrOutput {
-                    text: self.transcribe_one(request.pcm)?,
-                    tokens: Vec::<Token>::new(),
-                })
+                let (text, tokens) = self.transcribe_one(request.pcm)?;
+                Ok(AsrOutput { text, tokens })
             })
             .collect()
     }

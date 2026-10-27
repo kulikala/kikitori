@@ -1,8 +1,11 @@
-use crate::{AsrEngine, AsrRequest, Diarizer, Segment, SpeakerSpan, Vad, SAMPLE_RATE};
+use crate::{AsrEngine, AsrRequest, Diarizer, Segment, SpeakerSpan, Token, Vad, SAMPLE_RATE};
 use rand::{rngs::StdRng, SeedableRng};
 use rand_distr::{Distribution, StandardNormal};
 
 const EXT: f64 = 0.6;
+
+/// Text and pause offsets to punctuated text (see [`PipelineOptions::punctuate`]).
+pub type Punctuate<'a> = dyn Fn(&str, &[usize]) -> String + 'a;
 
 pub struct PipelineOptions<'a> {
     pub context: &'a [String],
@@ -14,6 +17,10 @@ pub struct PipelineOptions<'a> {
     pub pad: f64,
     /// Skip diarization-only spans that overlap one already added from diarization.
     pub fix_overlapping_turn_spans: bool,
+    /// Adds punctuation to a piece's text. Gets the text and the offsets (counted in
+    /// non-whitespace characters) of the word boundaries followed by a pause in the audio.
+    /// Not called when the recognizer returns a span per token, which would end every token.
+    pub punctuate: Option<&'a Punctuate<'a>>,
 }
 
 impl Default for PipelineOptions<'_> {
@@ -25,6 +32,7 @@ impl Default for PipelineOptions<'_> {
             min_piece: 0.5,
             pad: 1.0,
             fix_overlapping_turn_spans: true,
+            punctuate: None,
         }
     }
 }
@@ -196,6 +204,64 @@ fn quietest(pcm: &[f32], low: f64, high: f64) -> f64 {
 }
 
 /// Run VAD, diarization, padded ASR and speaker assignment over 16 kHz mono samples.
+/// Shortest silence, in seconds, that counts as a pause between two words.
+const PAUSE: f64 = 0.15;
+/// A frame is silent when it is this many dB below the piece's loud frames.
+const SILENCE_DB: f32 = 25.0;
+/// Tokens come out of the recognizer a little after they are spoken, so the search for the
+/// silence after a word starts this much before that word's last token.
+const TOKEN_LAG: f64 = 0.2;
+
+/// Offsets (in non-whitespace characters) where the audio between two tokens has a pause.
+/// `origin` is the time in `pcm` that token time 0 refers to.
+fn pauses(pcm: &[f32], origin: f64, tokens: &[Token]) -> Vec<usize> {
+    let times: Vec<f64> = tokens
+        .iter()
+        .flat_map(|token| {
+            let at = origin + f64::from(token.start);
+            token
+                .text
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .map(move |_| at)
+        })
+        .collect();
+    let (Some(&first), Some(&last)) = (times.first(), times.last()) else {
+        return Vec::new();
+    };
+    const HOP: usize = SAMPLE_RATE / 100;
+    let db = |frame: usize| {
+        let samples = pcm
+            .get(frame * HOP..((frame + 1) * HOP).min(pcm.len()))
+            .unwrap_or(&[]);
+        let power = samples.iter().map(|x| x * x).sum::<f32>() / samples.len().max(1) as f32;
+        10.0 * (power + 1e-10).log10()
+    };
+    let frame = |t: f64| (t.max(0.0) * 100.0) as usize;
+    let mut levels: Vec<f32> = (frame(first)..=frame(last)).map(db).collect();
+    if levels.is_empty() {
+        return Vec::new();
+    }
+    let rank = (levels.len() - 1) * 9 / 10;
+    let loud = *levels.select_nth_unstable_by(rank, f32::total_cmp).1;
+    let silent = loud - SILENCE_DB;
+    let mut out = Vec::new();
+    for k in 1..times.len() {
+        if times[k] <= times[k - 1] {
+            continue;
+        }
+        let (mut run, mut longest) = (0, 0);
+        for f in frame(times[k - 1] - TOKEN_LAG)..=frame(times[k]) {
+            run = if db(f) < silent { run + 1 } else { 0 };
+            longest = longest.max(run);
+        }
+        if longest as f64 / 100.0 >= PAUSE {
+            out.push(k);
+        }
+    }
+    out
+}
+
 pub fn run(
     pcm: &[f32],
     asr: &mut dyn AsrEngine,
@@ -326,6 +392,10 @@ pub fn run(
             }
         } else {
             output.text = output.text.trim().to_owned();
+            if let Some(punctuate) = options.punctuate {
+                let at = pauses(pcm, piece.start - options.pad, &output.tokens);
+                output.text = punctuate(&output.text, &at);
+            }
             if let Some(replacer) = replace.as_deref_mut() {
                 output.text = replacer(&output.text);
             }
