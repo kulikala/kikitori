@@ -144,6 +144,13 @@ struct TranscribeArgs {
     diarizer: Option<String>,
     #[arg(long, help = "Python 版互換の区間重複動作を使う")]
     python_compat: bool,
+    #[arg(
+        long = "asr-workers",
+        default_value_t = 0,
+        hide = true,
+        help = "並列に動かす認識器の数（0 は自動）"
+    )]
+    asr_workers: usize,
 }
 
 #[derive(Args, Debug)]

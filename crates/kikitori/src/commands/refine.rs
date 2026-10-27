@@ -543,6 +543,8 @@ fn transcribe_args(args: &RefineArgs) -> crate::TranscribeArgs {
         asr: None,
         diarizer: None,
         python_compat: false,
+        // 補正は B・K のモデルも読むので、A の認識器は1つにしてメモリを抑える
+        asr_workers: 1,
     }
 }
 

@@ -307,26 +307,23 @@ impl Pyannote {
         })
     }
 
-    fn reembed(
-        &mut self,
+    /// `indices` の区間の話者埋め込みを、長さ 1 に揃えて返す。
+    fn embed(
+        model: &std::path::Path,
+        threads: usize,
         pcm: &[f32],
-        turns: &mut [SpeakerSpan],
-    ) -> Result<Vec<SpeakerSpan>, String> {
+        turns: &[SpeakerSpan],
+        indices: &[usize],
+    ) -> Result<Vec<Vec<f64>>, String> {
         let extractor = SpeakerEmbeddingExtractor::create(&SpeakerEmbeddingExtractorConfig {
-            model: Some(self.embedding.display().to_string()),
-            num_threads: self.threads as i32,
+            model: Some(model.display().to_string()),
+            num_threads: threads as i32,
             provider: Some("cpu".to_owned()),
             ..SpeakerEmbeddingExtractorConfig::default()
         })
         .ok_or_else(|| "話者埋め込みモデルを作成できませんでした。".to_owned())?;
-        let keep: Vec<usize> = turns
-            .iter()
-            .enumerate()
-            .filter_map(|(index, turn)| ((turn.end - turn.start) >= 0.4).then_some(index))
-            .collect();
-        let mut vectors = Vec::with_capacity(keep.len());
-        let mut weights = Vec::with_capacity(keep.len());
-        for &index in &keep {
+        let mut vectors = Vec::with_capacity(indices.len());
+        for &index in indices {
             let turn = &turns[index];
             let (start, end) = embedding_window(turn.start, turn.end);
             let lo = ((start * SAMPLE_RATE as f64) as usize).min(pcm.len());
@@ -345,8 +342,52 @@ impl Pyannote {
                 *value /= norm;
             }
             vectors.push(vector);
-            weights.push((turn.end - turn.start).min(15.0));
         }
+        Ok(vectors)
+    }
+
+    fn reembed(
+        &mut self,
+        pcm: &[f32],
+        turns: &mut [SpeakerSpan],
+    ) -> Result<Vec<SpeakerSpan>, String> {
+        let keep: Vec<usize> = turns
+            .iter()
+            .enumerate()
+            .filter_map(|(index, turn)| ((turn.end - turn.start) >= 0.4).then_some(index))
+            .collect();
+        // 区間を続きのままスレッドの数に分け、スレッドごとに抽出器を作って順に計算する。結果の順は変わらない
+        let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+        let workers = (cores / self.threads.max(1))
+            .clamp(1, 4)
+            .min(keep.len().max(1));
+        let chunk = keep.len().div_ceil(workers).max(1);
+        let turns_ref: &[SpeakerSpan] = turns;
+        let (model, threads) = (self.embedding.as_path(), self.threads);
+        let parts: Vec<Result<Vec<Vec<f64>>, String>> = std::thread::scope(|scope| {
+            let handles: Vec<_> = keep
+                .chunks(chunk)
+                .map(|indices| {
+                    scope.spawn(move || Self::embed(model, threads, pcm, turns_ref, indices))
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| {
+                    handle
+                        .join()
+                        .unwrap_or_else(|_| Err("話者埋め込みの計算が止まりました。".to_owned()))
+                })
+                .collect()
+        });
+        let mut vectors = Vec::with_capacity(keep.len());
+        for part in parts {
+            vectors.extend(part?);
+        }
+        let weights: Vec<f64> = keep
+            .iter()
+            .map(|&index| (turns[index].end - turns[index].start).min(15.0))
+            .collect();
         let labels = cluster_embeddings(&vectors, &weights, self.num_speakers as usize);
         let mut by_turn = std::collections::HashMap::new();
         for (&index, &label) in keep.iter().zip(&labels) {

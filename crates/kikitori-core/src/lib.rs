@@ -4,6 +4,7 @@ pub mod error;
 mod format;
 pub mod paths;
 pub mod pipeline;
+pub mod pool;
 pub mod registry;
 
 /// ライブラリのクレートが利用者に出す案内と警告。CLI が [`notice::set_sink`] で自分のログにつなぐ。

@@ -196,9 +196,15 @@ pub fn transcribe_core(
     let _ = kikitori_sherpa::take_diagnostics();
     let mut asr: Box<dyn AsrEngine> = match kind {
         AsrKind::Reazon => capture::capture_stderr(|| {
-            kikitori_reazon::Reazon::new(&root, args.threads)
-                .map(|engine| Box::new(engine) as Box<dyn AsrEngine>)
+            let engines = (0..asr_workers(args.asr_workers, args.threads))
+                .map(|_| {
+                    kikitori_reazon::Reazon::new(&root, args.threads)
+                        .map(|engine| Box::new(engine) as Box<dyn AsrEngine>)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Box::new(kikitori_core::pool::AsrPool::new(engines)) as Box<dyn AsrEngine>)
         }),
+        // 長さでまとめて起こすので、区間を1つずつ配ると結果が変わりうる。並列にしない
         AsrKind::Greedy => capture::capture_stderr(|| {
             kikitori_sherpa::ReazonGreedy::new(&root, model, precision, args.threads)
                 .map(|engine| Box::new(engine) as Box<dyn AsrEngine>)
@@ -307,6 +313,21 @@ pub fn report_diagnostics() {
             log::info(&diagnostic.text);
         }
     }
+}
+
+/// 認識器の数。0 なら、認識器ごとのスレッド数の合計がコア数を超えない範囲で、2 までにする。
+/// 認識器を1つ足すごとにモデルの分（約 0.8GB）だけメモリが増えるので、メモリが 12GB 未満なら 1 つ。
+fn asr_workers(requested: usize, threads: usize) -> usize {
+    if requested > 0 {
+        return requested;
+    }
+    let mut system = sysinfo::System::new();
+    system.refresh_memory();
+    if system.total_memory() < 12_000_000_000 {
+        return 1;
+    }
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    (cores / threads.max(1)).clamp(1, 2)
 }
 
 fn select_asr(name: &str, model: &str, precision: &str) -> Result<AsrKind, CliError> {
