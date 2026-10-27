@@ -240,16 +240,14 @@ pub fn transcribe_core(
         if out != text {
             replaced += 1;
         }
-        match &punctuator {
-            Some(punctuator) => punctuator.punctuate(&out),
-            None => out,
-        }
+        out
     };
     let options = PipelineOptions {
         num_speakers: args.num_speakers,
         fix_overlapping_turn_spans: !args.python_compat,
         ..PipelineOptions::default()
     };
+    let asr_timestamps = asr.capabilities().timestamps;
     let (segments, a_waves) = if capture_a_waves {
         let mut recorder = Recorder::new(asr);
         let segments = capture::capture_stderr(|| {
@@ -259,8 +257,9 @@ pub fn transcribe_core(
                 &mut vad as &mut dyn Vad,
                 &mut diarizer as &mut dyn Diarizer,
                 &options,
-                (dict_replacer.is_some() || punctuator.is_some())
-                    .then_some(&mut replace as &mut dyn FnMut(&str) -> String),
+                dict_replacer
+                    .as_ref()
+                    .map(|_| &mut replace as &mut dyn FnMut(&str) -> String),
             )
         })
         .map_err(process_error)?;
@@ -273,13 +272,21 @@ pub fn transcribe_core(
                 &mut vad as &mut dyn Vad,
                 &mut diarizer as &mut dyn Diarizer,
                 &options,
-                (dict_replacer.is_some() || punctuator.is_some())
-                    .then_some(&mut replace as &mut dyn FnMut(&str) -> String),
+                dict_replacer
+                    .as_ref()
+                    .map(|_| &mut replace as &mut dyn FnMut(&str) -> String),
             )
         })
         .map_err(process_error)?;
         (segments, Vec::new())
     };
+    // 認識器がトークンごとの区間を返すときは、句読点を付けると区間ごとに「。」が付くので付けない
+    let mut segments = segments;
+    if let Some(punctuator) = punctuator.as_ref().filter(|_| !asr_timestamps) {
+        for segment in &mut segments {
+            segment.text = punctuator.punctuate(&segment.text);
+        }
+    }
     if dict_replacer.is_some() {
         // 辞書は認識結果の読みが辞書の読みと一致したときだけ置き換えるので、効いたかを知らせる
         crate::log::info(&format!(
