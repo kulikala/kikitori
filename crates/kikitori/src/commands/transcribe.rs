@@ -183,6 +183,19 @@ pub fn transcribe_core(
         None
     };
 
+    let punctuator = if args.no_punctuation {
+        None
+    } else {
+        let dir = kikitori_dict::default_dictionary_dir();
+        match kikitori_dict::Punctuator::new(&dir) {
+            Ok(punctuator) => Some(punctuator),
+            Err(e) => {
+                log::warning(&format!("句読点を付けずに続けます: {e}"));
+                None
+            }
+        }
+    };
+
     let started = Instant::now();
     let input = args.input.as_deref().unwrap_or_default();
     let pcm = kikitori_audio::load(Path::new(input)).map_err(|e| {
@@ -227,7 +240,10 @@ pub fn transcribe_core(
         if out != text {
             replaced += 1;
         }
-        out
+        match &punctuator {
+            Some(punctuator) => punctuator.punctuate(&out),
+            None => out,
+        }
     };
     let options = PipelineOptions {
         num_speakers: args.num_speakers,
@@ -243,9 +259,8 @@ pub fn transcribe_core(
                 &mut vad as &mut dyn Vad,
                 &mut diarizer as &mut dyn Diarizer,
                 &options,
-                dict_replacer
-                    .as_ref()
-                    .map(|_| &mut replace as &mut dyn FnMut(&str) -> String),
+                (dict_replacer.is_some() || punctuator.is_some())
+                    .then_some(&mut replace as &mut dyn FnMut(&str) -> String),
             )
         })
         .map_err(process_error)?;
@@ -258,9 +273,8 @@ pub fn transcribe_core(
                 &mut vad as &mut dyn Vad,
                 &mut diarizer as &mut dyn Diarizer,
                 &options,
-                dict_replacer
-                    .as_ref()
-                    .map(|_| &mut replace as &mut dyn FnMut(&str) -> String),
+                (dict_replacer.is_some() || punctuator.is_some())
+                    .then_some(&mut replace as &mut dyn FnMut(&str) -> String),
             )
         })
         .map_err(process_error)?;

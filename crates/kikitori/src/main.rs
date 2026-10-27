@@ -144,6 +144,8 @@ struct TranscribeArgs {
     diarizer: Option<String>,
     #[arg(long, help = "Python 版互換の区間重複動作を使う")]
     python_compat: bool,
+    #[arg(long = "no-punctuation", help = "本文に句読点を付けない")]
+    no_punctuation: bool,
     #[arg(
         long = "asr-workers",
         default_value_t = 0,

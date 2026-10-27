@@ -141,6 +141,9 @@ fn load_tagger(dir: &Path) -> Result<Dict, DictionaryError> {
 
 struct Token {
     surface: String,
+    pos1: String,
+    pos2: String,
+    cform: String,
     pron: Option<String>,
     kana: Option<String>,
 }
@@ -157,6 +160,9 @@ fn tokenize(dict: &Dict, text: &str) -> Result<Vec<Token>, DictionaryError> {
             let value = |index: usize| fields.get(index).map(|v| (*v).to_owned());
             Token {
                 surface: token.get_text(text).to_owned(),
+                pos1: value(0).unwrap_or_default(),
+                pos2: value(1).unwrap_or_default(),
+                cform: value(5).filter(|v| v != "*").unwrap_or_default(),
                 pron: value(9),
                 kana: value(17),
             }
@@ -294,6 +300,81 @@ pub fn reading(text: &str, dictionary_dir: impl AsRef<Path>) -> Result<String, D
     Ok(out)
 }
 
+/// Adds 。 and 、 to unpunctuated Japanese text by morphological rules.
+pub struct Punctuator {
+    tagger: Dict,
+}
+
+const CONT_POS1: [&str; 3] = ["助詞", "助動詞", "接尾辞"];
+const COMMA_AFTER: [&str; 11] = [
+    "て",
+    "で",
+    "ので",
+    "から",
+    "けど",
+    "けれど",
+    "が",
+    "し",
+    "と",
+    "ば",
+    "たら",
+];
+const NO_COMMA_BEFORE: [&str; 5] = ["つい", "よっ", "対し", "おい", "関し"];
+
+impl Punctuator {
+    pub fn new(dictionary_dir: impl AsRef<Path>) -> Result<Self, DictionaryError> {
+        Ok(Self {
+            tagger: load_tagger(dictionary_dir.as_ref())?,
+        })
+    }
+
+    /// Text that already has punctuation, and empty text, is returned unchanged.
+    pub fn punctuate(&self, text: &str) -> String {
+        if text.is_empty() || text.contains(['。', '、', '？', '！', '?', '!']) {
+            return text.to_owned();
+        }
+        let Ok(words) = tokenize(&self.tagger, text) else {
+            return text.to_owned();
+        };
+        let mut out = String::with_capacity(text.len() * 4 / 3);
+        for (i, w) in words.iter().enumerate() {
+            out.push_str(&w.surface);
+            let Some(nxt) = words.get(i + 1) else {
+                out.push('。');
+                break;
+            };
+            let prev = if i > 0 {
+                words[i - 1].surface.as_str()
+            } else {
+                ""
+            };
+            let aux_next =
+                matches!(nxt.pos1.as_str(), "動詞" | "形容詞") && nxt.pos2 == "非自立可能";
+            let end_aux = w.surface == "ます"
+                || w.surface == "です"
+                || w.cform.starts_with("終止形")
+                || w.cform.starts_with("命令形");
+            let next_start = !CONT_POS1.contains(&nxt.pos1.as_str())
+                || nxt.surface == "じゃあ"
+                || nxt.surface == "じゃ";
+            if ((w.pos2 == "終助詞" || end_aux) && next_start && !aux_next && nxt.pos1 != "名詞")
+                || (end_aux && matches!(nxt.pos1.as_str(), "代名詞" | "感動詞" | "接続詞" | "副詞"))
+            {
+                out.push('。');
+            } else if (w.pos1 == "感動詞" && nxt.pos1 != "感動詞")
+                || (w.pos2 == "接続助詞"
+                    && COMMA_AFTER.contains(&w.surface.as_str())
+                    && !CONT_POS1.contains(&nxt.pos1.as_str())
+                    && !aux_next
+                    && !NO_COMMA_BEFORE.contains(&prev))
+            {
+                out.push('、');
+            }
+        }
+        out
+    }
+}
+
 /// Default dictionary directory under the user's kikitori cache.
 pub fn default_dictionary_dir() -> PathBuf {
     kikitori_core::paths::dictionary_root().join("unidic-lite-1.0.8")
@@ -369,5 +450,32 @@ mod tests {
             .unwrap(),
             "トウキョウダイガク"
         );
+    }
+
+    fn punctuator() -> Option<Punctuator> {
+        let dir = std::env::var_os("KIKITORI_TEST_UNIDIC")
+            .map_or_else(default_dictionary_dir, PathBuf::from);
+        if !dir.join("sys.dic").is_file() {
+            eprintln!("skipping punctuation test: UniDic is not installed");
+            return None;
+        }
+        Some(Punctuator::new(dir).unwrap())
+    }
+
+    #[test]
+    fn punctuation_splits_sentences() {
+        let Some(p) = punctuator() else { return };
+        assert_eq!(
+            p.punctuate("今日は雨ですそれでは会議を始めます"),
+            "今日は雨です。それでは会議を始めます。"
+        );
+    }
+
+    #[test]
+    fn punctuation_keeps_existing_marks_and_empty() {
+        let Some(p) = punctuator() else { return };
+        assert_eq!(p.punctuate("今日は晴れです。"), "今日は晴れです。");
+        assert_eq!(p.punctuate("そうですか？はい"), "そうですか？はい");
+        assert_eq!(p.punctuate(""), "");
     }
 }
