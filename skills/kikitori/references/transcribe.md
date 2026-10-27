@@ -37,8 +37,8 @@ m4a・mp4・mp3・wav・flac・ogg は、そのまま読めます。Opus（Googl
 
 ## 時間の目安
 
-67 分の会議を Apple Silicon の Mac の CPU で起こすと、約 280 秒でした（音声の長さの約 0.07 倍）。長い録音では、ffmpeg があれば `ffmpeg -t 300 -i 会議.m4a 先頭.m4a` で先頭の 5 分を切り出して試し、人数・辞書・出力形式の指定を確かめてから全体を起こせます。
+68 分の会議を Apple Silicon の Mac の CPU で起こすと、約 300 秒でした（音声の長さの約 0.07 倍）。長い録音では、ffmpeg があれば `ffmpeg -t 300 -i 会議.m4a 先頭.m4a` で先頭の 5 分を切り出して試し、人数・辞書・出力形式の指定を確かめてから全体を起こせます。
 
 ## 精度
 
-朗読の公開データ（FLEURS）では、文字誤り率が kikitori 5.9%、Whisper large-v3-turbo 5.2% で、Whisper のほうが正確です。放送の自然な発話（ReazonSpeech の評価用データ）では 7.1% 対 10.9% で kikitori が上回りますが、このデータは kikitori の認識モデルと同じ系統で、kikitori に有利です。会議の音声そのもので比べた値ではありません。
+朗読の公開データ（FLEURS）では、文字誤り率が kikitori 6.1%、Whisper large-v3-turbo 5.2% で、Whisper のほうが正確です。放送の自然な発話（ReazonSpeech の評価用データ）では 8.4% 対 10.9% で kikitori が上回りますが、このデータは kikitori の認識モデルと同じ系統で、kikitori に有利です。会議の音声そのもので比べた値ではありません。
