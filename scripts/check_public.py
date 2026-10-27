@@ -8,6 +8,8 @@
 - タグのメッセージ
 - 作業ツリーのうち git が管理するファイル（git ls-files）
 - --dist で渡したフォルダの wheel と sdist の中身
+- 公開する履歴と作業ツリーに、音声・データセットのファイルや、ベンチの置き場（bench/）のファイルが無いか
+  （録音と出力は公開しない。テストの合成音と道具の見本だけを許す）
 使い方: python scripts/check_public.py [--rev main] [--dist フォルダ]
 """
 import argparse
@@ -35,6 +37,15 @@ def denylist():
     return words
 
 
+MEDIA = (".wav", ".aiff", ".aif", ".m4a", ".mp3", ".mp4", ".flac", ".ogg", ".opus", ".webm", ".parquet", ".arrow")
+MEDIA_ALLOWED = ("crates/kikitori-audio/tests/fixtures/", "tools/truth_edit/sample/")
+
+
+def check_media(where, path, hits):
+    if path.startswith("bench/") or (path.lower().endswith(MEDIA) and not path.startswith(MEDIA_ALLOWED)):
+        hits.append(f"{where}: 音声・データのファイル {path}")
+
+
 def scan(where, text, words, hits):
     low = text.lower()
     for w in words:
@@ -57,12 +68,14 @@ def main(argv=None):
         scan(f"{c[:8]} のメタデータ", git("log", "-1", "--format=%an %ae %cn %ce%n%B", c), words, hits)
         for path in git("ls-tree", "-r", "--name-only", c).splitlines():
             scan(f"{c[:8]} のパス", path, words, hits)
+            check_media(f"{c[:8]} のパス", path, hits)
             scan(f"{c[:8]}:{path}", git("show", f"{c}:{path}"), words, hits)
     for t in git("tag", "-l").split():
         scan(f"タグ {t}", git("tag", "-l", "--format=%(contents)", t), words, hits)
     for path in git("ls-files").splitlines():
         f = ROOT / path
         scan(f"作業ツリー {path}", path, words, hits)
+        check_media(f"作業ツリー {path}", path, hits)
         if f.is_file():
             scan(f"作業ツリー {path}", f.read_bytes().decode("utf-8", "replace"), words, hits)
     if a.dist:
