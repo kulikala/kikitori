@@ -97,7 +97,11 @@ fn matches_python_recorded_pipeline_cases() {
             &mut asr,
             &mut vad,
             &mut diarizer,
-            &PipelineOptions::default(),
+            // The cases were recorded with the Python version's 0.5 s pad
+            &PipelineOptions {
+                pad: 0.5,
+                ..PipelineOptions::default()
+            },
             None,
         )
         .unwrap_or_else(|error| panic!("case {case_idx}: {error}"));

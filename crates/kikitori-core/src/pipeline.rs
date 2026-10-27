@@ -2,7 +2,6 @@ use crate::{AsrEngine, AsrRequest, Diarizer, Segment, SpeakerSpan, Vad, SAMPLE_R
 use rand::{rngs::StdRng, SeedableRng};
 use rand_distr::{Distribution, StandardNormal};
 
-const PAD: f64 = 0.5;
 const EXT: f64 = 0.6;
 
 pub struct PipelineOptions<'a> {
@@ -10,6 +9,9 @@ pub struct PipelineOptions<'a> {
     pub language: Option<&'a str>,
     pub num_speakers: i32,
     pub min_piece: f64,
+    /// Noise added before and after each piece, in seconds. ReazonSpeech drops the first words
+    /// of a piece that starts with too little quiet before it.
+    pub pad: f64,
     /// Skip diarization-only spans that overlap one already added from diarization.
     pub fix_overlapping_turn_spans: bool,
 }
@@ -21,6 +23,7 @@ impl Default for PipelineOptions<'_> {
             language: None,
             num_speakers: -1,
             min_piece: 0.5,
+            pad: 2.0,
             fix_overlapping_turn_spans: true,
         }
     }
@@ -114,6 +117,67 @@ pub fn plan(spans: &[(f64, f64)], turns: &[SpeakerSpan], min_piece: f64) -> Vec<
     pieces
 }
 
+/// Split pieces longer than the ASR's `max_seconds`: models drop the first part of longer input.
+/// Cut in the middle of a VAD gap where there is one, otherwise at the quietest 0.1 s.
+pub fn split_long(
+    pieces: Vec<SpeakerSpan>,
+    vad: &[(f64, f64)],
+    pcm: &[f32],
+    max_seconds: f64,
+) -> Vec<SpeakerSpan> {
+    if max_seconds <= 0.0 {
+        return pieces;
+    }
+    let mut out = Vec::new();
+    for piece in pieces {
+        let mut start = piece.start;
+        while piece.end - start > max_seconds {
+            let low = start + max_seconds / 2.0;
+            let high = start + max_seconds;
+            // Leave the silence out of both pieces, so neither pad picks up the other's speech
+            let (end, next) = vad
+                .windows(2)
+                .map(|w| (w[0].1, w[1].0))
+                .rfind(|(a, b)| low <= (a + b) / 2.0 && (a + b) / 2.0 <= high)
+                .unwrap_or_else(|| {
+                    let cut = quietest(pcm, low, high);
+                    (cut, cut)
+                });
+            out.push(SpeakerSpan {
+                start,
+                end,
+                speaker: piece.speaker,
+            });
+            start = next;
+        }
+        out.push(SpeakerSpan {
+            start,
+            end: piece.end,
+            speaker: piece.speaker,
+        });
+    }
+    out
+}
+
+fn quietest(pcm: &[f32], low: f64, high: f64) -> f64 {
+    let window = SAMPLE_RATE / 10;
+    let first = (low * SAMPLE_RATE as f64) as usize;
+    let last = ((high * SAMPLE_RATE as f64) as usize).min(pcm.len());
+    let mut best = (f64::MAX, high);
+    let mut at = first;
+    while at + window <= last {
+        let energy: f64 = pcm[at..at + window]
+            .iter()
+            .map(|v| f64::from(*v).powi(2))
+            .sum();
+        if energy < best.0 {
+            best = (energy, (at + window / 2) as f64 / SAMPLE_RATE as f64);
+        }
+        at += window / 2;
+    }
+    best.1
+}
+
 /// Run VAD, diarization, padded ASR and speaker assignment over 16 kHz mono samples.
 pub fn run(
     pcm: &[f32],
@@ -134,7 +198,7 @@ pub fn run(
     let total = pcm.len() as f64 / SAMPLE_RATE as f64;
     let raw_vad = vad.spans(pcm)?;
     let mut spans: Vec<(f64, f64)> = Vec::new();
-    for span in raw_vad {
+    for span in raw_vad.iter() {
         let a = 0.0_f64.max(span.start - EXT);
         let b = total.min(span.end + EXT);
         if let Some(last) = spans.last_mut().filter(|last| a <= last.1) {
@@ -172,7 +236,14 @@ pub fn run(
     }
     spans.extend(additions);
     spans.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
-    let pieces = plan(&spans, &turns, options.min_piece);
+    let raw: Vec<(f64, f64)> = raw_vad.iter().map(|s| (s.start, s.end)).collect();
+    let max_seconds = f64::from(asr.capabilities().max_seconds);
+    let pieces = split_long(
+        plan(&spans, &turns, options.min_piece),
+        &raw,
+        pcm,
+        max_seconds,
+    );
     let mut bounds: Vec<f64> = pieces.iter().flat_map(|p| [p.start, p.end]).collect();
     bounds.sort_by(f64::total_cmp);
     bounds.dedup_by(|a, b| *a == *b);
@@ -195,9 +266,9 @@ pub fn run(
         let right_pad = 0.4_f64.min(0.0_f64.max((next - piece.end) / 2.0));
         let start = ((piece.start - left_pad) * SAMPLE_RATE as f64) as usize;
         let end = ((piece.end + right_pad) * SAMPLE_RATE as f64) as usize;
-        let mut wave = noise(PAD - left_pad, &mut rng);
+        let mut wave = noise(options.pad - left_pad, &mut rng);
         wave.extend_from_slice(&pcm[start.min(pcm.len())..end.min(pcm.len())]);
-        wave.extend(noise(PAD - right_pad, &mut rng));
+        wave.extend(noise(options.pad - right_pad, &mut rng));
         waves.push(wave);
     }
     let requests: Vec<AsrRequest<'_>> = waves
@@ -226,8 +297,8 @@ pub fn run(
                     text = replacer(&text);
                 }
                 if !text.is_empty() {
-                    let start = piece.start - PAD + f64::from(token.start);
-                    let end = piece.start - PAD + f64::from(token.end);
+                    let start = piece.start - options.pad + f64::from(token.start);
+                    let end = piece.start - options.pad + f64::from(token.end);
                     segments.push(Segment {
                         start,
                         end,
@@ -314,6 +385,36 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!((result[0].speaker, result[1].speaker), (0, 1));
         assert_eq!((result[0].start, result[0].end), (0.0, 2.0));
+    }
+
+    #[test]
+    fn long_pieces_split_in_vad_gaps_and_keep_the_silence_out() {
+        let piece = SpeakerSpan {
+            start: 0.0,
+            end: 40.0,
+            speaker: 3,
+        };
+        let vad = [(0.0, 9.0), (9.6, 18.0), (18.8, 27.0), (27.4, 40.0)];
+        let pcm = vec![0.0; 40 * SAMPLE_RATE];
+        let pieces = split_long(vec![piece], &vad, &pcm, 15.0);
+        let edges: Vec<(f64, f64)> = pieces.iter().map(|p| (p.start, p.end)).collect();
+        assert_eq!(edges, [(0.0, 9.0), (9.6, 18.0), (18.8, 27.0), (27.4, 40.0)]);
+        assert!(pieces.iter().all(|p| p.speaker == 3));
+    }
+
+    #[test]
+    fn long_pieces_without_a_gap_split_at_the_quietest_point() {
+        let piece = SpeakerSpan {
+            start: 0.0,
+            end: 20.0,
+            speaker: 0,
+        };
+        let mut pcm = vec![0.5; 20 * SAMPLE_RATE];
+        pcm[12 * SAMPLE_RATE..12 * SAMPLE_RATE + SAMPLE_RATE / 5].fill(0.0);
+        let pieces = split_long(vec![piece], &[(0.0, 20.0)], &pcm, 15.0);
+        assert_eq!(pieces.len(), 2);
+        assert!((pieces[0].end - 12.1).abs() < 0.06, "{}", pieces[0].end);
+        assert_eq!(pieces[0].end, pieces[1].start);
     }
 
     #[test]

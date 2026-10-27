@@ -124,7 +124,8 @@ impl ReazonGreedy {
             capabilities: Capabilities {
                 timestamps: false,
                 context: false,
-                max_seconds: 60.0,
+                // ReazonSpeech drops words from the front of longer input (20 s already loses some)
+                max_seconds: 15.0,
                 dtypes: &[DType::F32, DType::F16, DType::Int8],
             },
         })
