@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "kikitori"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -2022,7 +2022,7 @@ dependencies = [
 
 [[package]]
 name = "kikitori-audio"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "rubato",
  "symphonia",
@@ -2031,7 +2031,7 @@ dependencies = [
 
 [[package]]
 name = "kikitori-core"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "rand 0.8.8",
  "rand_distr 0.4.3",
@@ -2041,7 +2041,7 @@ dependencies = [
 
 [[package]]
 name = "kikitori-dict"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "kikitori-core",
  "notmecab",
@@ -2052,7 +2052,7 @@ dependencies = [
 
 [[package]]
 name = "kikitori-fetch"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "bzip2 0.5.2",
  "flate2",
@@ -2070,14 +2070,14 @@ dependencies = [
 
 [[package]]
 name = "kikitori-knf-sys"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "cmake",
 ]
 
 [[package]]
 name = "kikitori-qwen3asr"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -2092,7 +2092,7 @@ dependencies = [
 
 [[package]]
 name = "kikitori-reazon"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "hound",
  "kikitori-core",
@@ -2107,7 +2107,7 @@ dependencies = [
 
 [[package]]
 name = "kikitori-refine"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "kikitori-core",
  "kikitori-dict",
@@ -2126,7 +2126,7 @@ dependencies = [
 
 [[package]]
 name = "kikitori-sherpa"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "kikitori-core",
  "sherpa-onnx",
@@ -2134,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "kikitori-whisper"
-version = "0.4.0"
+version = "0.5.0-dev"
 dependencies = [
  "accelerate-src",
  "anyhow",
