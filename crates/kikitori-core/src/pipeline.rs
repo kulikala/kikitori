@@ -23,7 +23,7 @@ impl Default for PipelineOptions<'_> {
             language: None,
             num_speakers: -1,
             min_piece: 0.5,
-            pad: 2.0,
+            pad: 1.0,
             fix_overlapping_turn_spans: true,
         }
     }
@@ -117,8 +117,12 @@ pub fn plan(spans: &[(f64, f64)], turns: &[SpeakerSpan], min_piece: f64) -> Vec<
     pieces
 }
 
+/// A piece longer than `max_seconds` times this, with no VAD gap to cut at, is cut at its quietest point.
+const HARD: f64 = 1.25;
+
 /// Split pieces longer than the ASR's `max_seconds`: models drop the first part of longer input.
-/// Cut in the middle of a VAD gap where there is one, otherwise at the quietest 0.1 s.
+/// Cut at a VAD gap; only a piece longer than `HARD` times that with no gap is cut at the quietest
+/// 0.1 s, since a cut inside speech costs more than the length does.
 pub fn split_long(
     pieces: Vec<SpeakerSpan>,
     vad: &[(f64, f64)],
@@ -134,15 +138,28 @@ pub fn split_long(
         while piece.end - start > max_seconds {
             let low = start + max_seconds / 2.0;
             let high = start + max_seconds;
+            let hard = start + max_seconds * HARD;
+            let gap_in = |to: f64| {
+                vad.windows(2)
+                    .map(|w| (w[0].1, w[1].0))
+                    // Only a gap that lies inside what is left of the piece
+                    .rfind(|(a, b)| {
+                        start < *a
+                            && a <= b
+                            && *b < piece.end
+                            && low <= (a + b) / 2.0
+                            && (a + b) / 2.0 <= to
+                    })
+            };
             // Leave the silence out of both pieces, so neither pad picks up the other's speech
-            let (end, next) = vad
-                .windows(2)
-                .map(|w| (w[0].1, w[1].0))
-                .rfind(|(a, b)| low <= (a + b) / 2.0 && (a + b) / 2.0 <= high)
-                .unwrap_or_else(|| {
+            let (end, next) = match gap_in(high).or_else(|| gap_in(hard)) {
+                Some(gap) => gap,
+                None if piece.end > hard => {
                     let cut = quietest(pcm, low, high);
                     (cut, cut)
-                });
+                }
+                None => break,
+            };
             out.push(SpeakerSpan {
                 start,
                 end,
@@ -400,6 +417,34 @@ mod tests {
         let edges: Vec<(f64, f64)> = pieces.iter().map(|p| (p.start, p.end)).collect();
         assert_eq!(edges, [(0.0, 9.0), (9.6, 18.0), (18.8, 27.0), (27.4, 40.0)]);
         assert!(pieces.iter().all(|p| p.speaker == 3));
+    }
+
+    #[test]
+    fn a_gap_reaching_outside_the_piece_is_not_a_cut() {
+        // The diarizer cut this piece inside a long VAD gap (9 s to 30 s)
+        let piece = SpeakerSpan {
+            start: 12.0,
+            end: 40.0,
+            speaker: 0,
+        };
+        let vad = [(0.0, 9.0), (30.0, 40.0)];
+        let pcm = vec![0.5; 40 * SAMPLE_RATE];
+        let pieces = split_long(vec![piece], &vad, &pcm, 20.0);
+        assert!(pieces.iter().all(|p| p.start < p.end), "{pieces:?}");
+        assert_eq!(pieces.first().unwrap().start, 12.0);
+        assert_eq!(pieces.last().unwrap().end, 40.0);
+    }
+
+    #[test]
+    fn a_piece_without_a_gap_stays_whole_up_to_the_hard_limit() {
+        let piece = SpeakerSpan {
+            start: 0.0,
+            end: 24.0,
+            speaker: 0,
+        };
+        let pcm = vec![0.5; 24 * SAMPLE_RATE];
+        let pieces = split_long(vec![piece], &[(0.0, 24.0)], &pcm, 20.0);
+        assert_eq!(pieces.len(), 1);
     }
 
     #[test]
