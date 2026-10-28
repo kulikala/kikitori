@@ -7,11 +7,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-kikitori-core = { version = "0.6.0-dev", path = "../kikitori-core" }
-kikitori-fetch = { version = "0.6.0-dev", path = "../kikitori-fetch" }
-kikitori-dict = { version = "0.6.0-dev", path = "../kikitori-dict" }
-kikitori-qwen3asr = { version = "0.6.0-dev", path = "../kikitori-qwen3asr" }
-kikitori-whisper = { version = "0.6.0-dev", path = "../kikitori-whisper" }
+kikitori-core = { version = "0.6.0", path = "../kikitori-core" }
+kikitori-fetch = { version = "0.6.0", path = "../kikitori-fetch" }
+kikitori-dict = { version = "0.6.0", path = "../kikitori-dict" }
+kikitori-qwen3asr = { version = "0.6.0", path = "../kikitori-qwen3asr" }
+kikitori-whisper = { version = "0.6.0", path = "../kikitori-whisper" }
 notmecab = "0.5.1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }

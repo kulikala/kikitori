@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-kikitori-core = { version = "0.6.0-dev", path = "../kikitori-core" }
+kikitori-core = { version = "0.6.0", path = "../kikitori-core" }
 notmecab = "0.5.1"
 unicode-normalization = "0.1"
 
