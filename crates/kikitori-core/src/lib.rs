@@ -106,11 +106,6 @@ pub trait AsrEngine: Send {
     fn id(&self) -> &str;
     fn capabilities(&self) -> &Capabilities;
     fn transcribe(&mut self, requests: &[AsrRequest<'_>]) -> Result<Vec<AsrOutput>, String>;
-
-    /// 同時に働かせる認識器の数。返した値を上げると、待っていた認識器が動き出す。
-    fn limit(&self) -> Option<std::sync::Arc<std::sync::atomic::AtomicUsize>> {
-        None
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -9,6 +9,12 @@ use commands::*;
 use kikitori_core::{CliError, ErrorKind};
 use std::process::ExitCode as ProcessExitCode;
 
+/// 既定のスレッド数。コア数の 3/4 を上限に、指定の値を超えない。
+fn default_threads(preferred: usize) -> usize {
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    preferred.min((cores * 3 / 4).max(1))
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum LogFormat {
     Human,
@@ -128,7 +134,7 @@ struct TranscribeArgs {
     device: String,
     #[arg(long, default_value = "fp32", value_parser = ["int8", "fp16", "fp32"], help = "モデルの数値精度")]
     precision: String,
-    #[arg(long, default_value_t = 3, help = "スレッド数")]
+    #[arg(long, default_value_t = default_threads(3), help = "スレッド数（既定 3。コアが少ない機械では少なくなる）")]
     threads: usize,
     #[arg(long = "num-speakers", default_value_t = -1, help = "話者数（-1 は自動判定）")]
     num_speakers: i32,
@@ -214,7 +220,7 @@ struct RefineArgs {
     device: String,
     #[arg(long, default_value = "auto", value_parser = ["auto", "int8", "fp16", "fp32", "bf16"], help = "モデルの数値精度")]
     dtype: String,
-    #[arg(long, default_value_t = 4, help = "スレッド数")]
+    #[arg(long, default_value_t = default_threads(4), help = "スレッド数（既定 4。コアが少ない機械では少なくなる）")]
     threads: usize,
     #[arg(long = "num-speakers", default_value_t = -1, help = "話者数（-1 は自動判定）")]
     num_speakers: i32,

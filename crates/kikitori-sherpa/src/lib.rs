@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 const BATCH_SAMPLES: usize = 16_000 * 60;
-const MIN_CHUNK: f64 = 300.0;
+const CHUNK_SECONDS: f64 = 1500.0;
 const SEGMENTATION: &str = "sherpa-onnx-pyannote-segmentation-3-0/model.onnx";
 const EMBEDDING: &str = "3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx";
 
@@ -257,7 +257,6 @@ pub struct Pyannote {
     threshold: f64,
     threads: usize,
     num_speakers: i32,
-    budget: Option<usize>,
 }
 
 impl Pyannote {
@@ -313,13 +312,17 @@ impl Pyannote {
             threshold,
             threads,
             num_speakers,
-            budget: None,
         })
     }
 
-    /// CLI が決めた話者分離のスレッド数の上限。KIKITORI_DIAR_THREADS が設定されていればそちらが勝つ。
-    pub fn set_budget(&mut self, budget: Option<usize>) {
-        self.budget = budget;
+    /// 話者分離に使ってよいスレッド数。KIKITORI_DIAR_THREADS が設定されていればそちらが勝つ。
+    fn budget(&self) -> usize {
+        let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+        std::env::var("KIKITORI_DIAR_THREADS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or((cores * 3 / 4).max(1))
+            .clamp(1, cores.saturating_sub(1).max(1))
     }
 
     /// `indices` の区間の話者埋め込みを、長さ 1 に揃えて返す。
@@ -375,10 +378,7 @@ impl Pyannote {
         // 区間を続きのままスレッドの数に分け、スレッドごとに抽出器を作って順に計算する。結果の順は変わらない
         let (workers, threads) = match plan {
             Some((workers, threads)) => (workers.max(1), threads.max(1)),
-            None => {
-                let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
-                ((cores / self.threads.max(1)).clamp(1, 4), self.threads)
-            }
+            None => reembed_plan(self.budget(), self.instance_threads()),
         };
         let workers = workers.min(keep.len().max(1));
         let chunk = keep.len().div_ceil(workers).max(1);
@@ -506,8 +506,14 @@ impl Pyannote {
 
     /// チャンクに分けたときに話者分離へ使うスレッド数。分けないときは None。
     pub fn parallel_threads(&self, total_seconds: f64) -> Option<usize> {
-        self.chunk_plan(total_seconds)
+        self.plan(total_seconds)
             .map(|(workers, _, instance)| workers * instance)
+    }
+
+    /// チャンクに分けるときの数。分けないときは None。
+    pub fn chunk_count(&self, total_seconds: f64) -> Option<usize> {
+        self.plan(total_seconds)
+            .map(|_| chunk_count(total_seconds, chunk_override()))
     }
 
     /// チャンクごとの話者分離に使うスレッド数。KIKITORI_DIAR_THREADS は全体の上限のまま。
@@ -519,27 +525,14 @@ impl Pyannote {
             .max(1)
     }
 
-    /// チャンクに分けるときの (並列数, 目標の長さ, 1 つあたりのスレッド数)。分けないときは None。
-    fn chunk_plan(&self, total: f64) -> Option<(usize, f64, usize)> {
-        let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
-        // 上書きでも全コアを使い切らないようにする
-        let budget = std::env::var("KIKITORI_DIAR_THREADS")
-            .ok()
-            .and_then(|value| value.parse::<usize>().ok())
-            .or(self.budget)
-            .unwrap_or((cores * 3 / 4).max(1))
-            .clamp(1, cores.saturating_sub(1).max(1));
-        let instance = self.instance_threads();
-        let workers = (budget / instance).max(1);
-        let mut target = (total / workers as f64).max(MIN_CHUNK);
-        if let Ok(value) = std::env::var("KIKITORI_DIAR_CHUNK") {
-            if let Ok(seconds) = value.parse::<f64>() {
-                if seconds > 0.0 {
-                    target = seconds;
-                }
-            }
-        }
-        (workers > 1 && total >= 2.0 * target).then_some((workers, target, instance))
+    /// 環境変数を含めた設定から、チャンクに分けるときの (並列数, 目標の長さ, 1 つあたりのスレッド数) を返す。
+    fn plan(&self, total: f64) -> Option<(usize, f64, usize)> {
+        chunk_plan(
+            total,
+            self.budget(),
+            self.instance_threads(),
+            chunk_override(),
+        )
     }
 
     fn diarize_chunked(
@@ -561,8 +554,13 @@ impl Pyannote {
         let single_plan = Some((workers, instance_threads));
         let chunks = plan_chunks(total, &speech, target);
         if chunks.len() <= 1 {
+            diagnostic(false, "話者分離は分割せずに 1 回で処理します。".to_owned());
             return self.diarize_single_threads(pcm, single_threads, single_plan);
         }
+        diagnostic(
+            false,
+            format!("話者分離を {} チャンクに分けて処理します。", chunks.len()),
+        );
         let mut config = self.config.clone();
         config.segmentation.num_threads = instance_threads as i32;
         config.embedding.num_threads = instance_threads as i32;
@@ -838,7 +836,7 @@ impl Pyannote {
 impl Diarizer for Pyannote {
     fn diarize(&mut self, pcm: &[f32]) -> Result<Vec<SpeakerSpan>, String> {
         let total = pcm.len() as f64 / SAMPLE_RATE as f64;
-        let Some((workers, target, instance)) = self.chunk_plan(total) else {
+        let Some((workers, target, instance)) = self.plan(total) else {
             return self.diarize_single(pcm);
         };
         let speech = Silero::new(&self.models, self.threads)?.spans(pcm)?;
@@ -851,7 +849,7 @@ impl Diarizer for Pyannote {
         speech: &[VadSpan],
     ) -> Result<Vec<SpeakerSpan>, String> {
         let total = pcm.len() as f64 / SAMPLE_RATE as f64;
-        match self.chunk_plan(total) {
+        match self.plan(total) {
             Some((workers, target, instance)) => {
                 self.diarize_chunked(pcm, speech, workers, target, instance)
             }
@@ -887,6 +885,45 @@ fn select_turns(turns: &[LocalTurn], indices: &[usize]) -> Vec<usize> {
         chosen.push(index);
     }
     chosen
+}
+
+/// 長さから決まるチャンク数。コア数には依存しない。`override_seconds` があればそちらが優先。
+fn chunk_count(total: f64, override_seconds: Option<f64>) -> usize {
+    match override_seconds {
+        Some(seconds) if seconds > 0.0 => (total / seconds).round().max(1.0) as usize,
+        _ => (total / CHUNK_SECONDS).ceil().max(1.0) as usize,
+    }
+}
+
+/// KIKITORI_DIAR_CHUNK の秒数。未設定や 0 以下なら None。
+fn chunk_override() -> Option<f64> {
+    std::env::var("KIKITORI_DIAR_CHUNK")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|seconds| *seconds > 0.0)
+}
+
+/// 音声の長さとスレッドの予算から、チャンクに分けるときの (並列数, 目標の長さ, 1 つあたりのスレッド数) を返す。
+fn chunk_plan(
+    total: f64,
+    budget: usize,
+    instance_threads: usize,
+    override_seconds: Option<f64>,
+) -> Option<(usize, f64, usize)> {
+    let count = chunk_count(total, override_seconds);
+    if count < 2 {
+        return None;
+    }
+    let target = total / count as f64;
+    let instance = instance_threads.min(budget).max(1);
+    let workers = count.min((budget / instance).max(1));
+    Some((workers, target, instance))
+}
+
+/// チャンクに分けないときの並列数と、1 つあたりのスレッド数。積が予算を超えない。
+fn reembed_plan(budget: usize, instance_threads: usize) -> (usize, usize) {
+    let instance = instance_threads.min(budget).max(1);
+    ((budget / instance).max(1), instance)
 }
 
 /// 無音の中央で区切り、長さのそろったチャンクに分ける。
@@ -1136,6 +1173,52 @@ mod tests {
     #[test]
     fn clustering_keeps_empty_vectors_empty() {
         assert!(cluster_embeddings(&[], &[], 2).is_empty());
+    }
+
+    #[test]
+    fn chunk_plan_depends_only_on_length_and_budget() {
+        assert_eq!(chunk_count(4077.0, None), 3);
+        for budget in [1, 2, 3, 4, 6, 8, 9, 12, 16, 32] {
+            let (_, target, _) = chunk_plan(4077.0, budget, 3, None).unwrap();
+            assert!((target - 4077.0 / 3.0).abs() < 1e-9);
+        }
+        assert!(chunk_plan(1400.0, 12, 3, None).is_none());
+        assert_eq!(chunk_plan(4077.0, 3, 3, None).unwrap().0, 1);
+        assert_eq!(chunk_plan(4077.0, 9, 3, None).unwrap().0, 3);
+        assert_eq!(chunk_plan(4077.0, 12, 3, None).unwrap().0, 3);
+        assert_eq!(chunk_plan(7500.0, 12, 3, None).unwrap().0, 4);
+    }
+
+    #[test]
+    fn chunk_override_decides_the_chunk_count() {
+        assert_eq!(chunk_count(300.0, Some(100.0)), 3);
+        let (workers, target, _) = chunk_plan(300.0, 12, 3, Some(100.0)).unwrap();
+        assert!((target - 100.0).abs() < 1e-9);
+        assert_eq!(workers, 3);
+        let speech = vec![(0.0, 99.0), (101.0, 199.0), (201.0, 300.0)];
+        assert_eq!(plan_chunks(300.0, &speech, target).len(), 3);
+    }
+
+    #[test]
+    fn chunk_count_without_override_follows_chunk_seconds() {
+        assert_eq!(chunk_count(1400.0, None), 1);
+        assert!(chunk_plan(1400.0, 12, 3, None).is_none());
+        assert_eq!(chunk_count(4077.0, None), 3);
+        assert_eq!(chunk_count(300.0, Some(0.0)), 1);
+        assert_eq!(chunk_count(300.0, Some(200.0)), 2);
+    }
+
+    #[test]
+    fn reembed_plan_never_exceeds_the_budget() {
+        for budget in 1..=32 {
+            for instance in 1..=8 {
+                let (workers, threads) = reembed_plan(budget, instance);
+                assert!(
+                    workers * threads <= budget,
+                    "budget {budget}, instance {instance}: {workers} * {threads}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -21,21 +21,18 @@ fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let knf_dst = out_dir.join("knf");
     let knfc_dst = out_dir.join("knfc");
-    if !knf_dst.exists() {
-        copy_dir(&manifest_dir.join("knf"), &knf_dst);
-    }
-    if !knfc_dst.exists() {
-        copy_dir(&manifest_dir.join("knfc"), &knfc_dst);
-    }
+    copy_dir(&manifest_dir.join("knf"), &knf_dst);
+    copy_dir(&manifest_dir.join("knfc"), &knfc_dst);
 
     println!("cargo:rerun-if-changed=./knf");
     println!("cargo:rerun-if-changed=./knfc");
     println!("cargo:rerun-if-env-changed=KNF_STATIC_CRT");
+    println!("cargo:rerun-if-env-changed=PROFILE");
 
-    let profile = if cfg!(debug_assertions) {
-        "Debug"
-    } else {
+    let profile = if env::var("PROFILE").as_deref() == Ok("release") {
         "Release"
+    } else {
+        "Debug"
     };
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_features = env::var("CARGO_CFG_TARGET_FEATURE").unwrap_or_default();
@@ -60,7 +57,7 @@ fn main() {
         .build();
 
     println!("cargo:rustc-link-search={}", out_dir.join("lib").display());
-    if target_os == "macos" {
+    if matches!(target_os.as_str(), "macos" | "ios" | "freebsd") {
         println!("cargo:rustc-link-lib=c++");
     } else if target_os == "linux" {
         println!("cargo:rustc-link-lib=stdc++");
