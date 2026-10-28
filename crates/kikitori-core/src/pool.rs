@@ -3,18 +3,22 @@
 use crate::{AsrEngine, AsrOutput, AsrRequest, Capabilities};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
-    Mutex,
+    Arc, Mutex,
 };
 
 pub struct AsrPool {
     engines: Vec<Box<dyn AsrEngine>>,
+    limit: Arc<AtomicUsize>,
 }
 
 impl AsrPool {
     /// `engines` は同じ設定で作った認識器。1つ目の id と capabilities を代表に使う。
     pub fn new(engines: Vec<Box<dyn AsrEngine>>) -> Self {
         assert!(!engines.is_empty(), "AsrPool needs at least one engine");
-        Self { engines }
+        Self {
+            engines,
+            limit: Arc::new(AtomicUsize::new(usize::MAX)),
+        }
     }
 }
 
@@ -27,18 +31,30 @@ impl AsrEngine for AsrPool {
         self.engines[0].capabilities()
     }
 
+    fn limit(&self) -> Option<Arc<AtomicUsize>> {
+        Some(Arc::clone(&self.limit))
+    }
+
     fn transcribe(&mut self, requests: &[AsrRequest<'_>]) -> Result<Vec<AsrOutput>, String> {
         if self.engines.len() == 1 || requests.len() < 2 {
             return self.engines[0].transcribe(requests);
         }
         // 区間を1つずつ、空いた認識器が取る。長さの違う区間が混ざっても、手の空く認識器が出ない
         let next = AtomicUsize::new(0);
+        let limit = Arc::clone(&self.limit);
         let slots: Vec<Mutex<Option<Result<AsrOutput, String>>>> =
             requests.iter().map(|_| Mutex::new(None)).collect();
         std::thread::scope(|scope| {
-            for engine in &mut self.engines {
-                let (next, slots) = (&next, &slots);
+            for (position, engine) in self.engines.iter_mut().enumerate() {
+                let (next, slots, limit) = (&next, &slots, &limit);
                 scope.spawn(move || loop {
+                    // 上限が上がるまで待つ。残りが無ければ待たずに終わる
+                    while position >= limit.load(Ordering::Relaxed) {
+                        if next.load(Ordering::Relaxed) >= requests.len() {
+                            return;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                    }
                     let index = next.fetch_add(1, Ordering::Relaxed);
                     if index >= requests.len() {
                         break;
@@ -171,5 +187,24 @@ mod tests {
             pool(2, Some(3)).transcribe(&requests(&waves)).unwrap_err(),
             "boom"
         );
+    }
+
+    #[test]
+    fn a_raised_limit_lets_another_engine_join() {
+        let waves: Vec<Vec<f32>> = [9, 1, 5, 2, 8, 3, 7]
+            .iter()
+            .map(|&n| vec![0.0; n])
+            .collect();
+        let expected = pool(2, None).transcribe(&requests(&waves)).unwrap();
+        let mut limited = pool(2, None);
+        let limit = limited.limit().unwrap();
+        limit.store(1, Ordering::Relaxed);
+        let raiser = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            limit.store(2, Ordering::Relaxed);
+        });
+        let actual = limited.transcribe(&requests(&waves)).unwrap();
+        raiser.join().unwrap();
+        assert_eq!(actual, expected);
     }
 }

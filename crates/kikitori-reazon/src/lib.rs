@@ -63,9 +63,15 @@ fn environment() -> Result<&'static Environment, String> {
 }
 
 fn session(path: &Path, threads: usize, environment: &Environment) -> Result<Session, String> {
+    // ONNX Runtime のスレッドは待つあいだ回り続ける。計測用に KIKITORI_ORT_SPIN=1 で戻せる。
+    let spin = std::env::var("KIKITORI_ORT_SPIN").is_ok_and(|value| value == "1");
     Session::builder(environment)
         .map_err(|error| error.to_string())?
         .with_intra_threads(threads)
+        .map_err(|error| error.to_string())?
+        .with_intra_op_spinning(spin)
+        .map_err(|error| error.to_string())?
+        .with_inter_op_spinning(spin)
         .map_err(|error| error.to_string())?
         .commit_from_file(path)
         .map_err(|error| format!("{}: {error}", path.display()))

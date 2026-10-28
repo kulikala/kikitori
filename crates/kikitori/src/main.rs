@@ -128,7 +128,7 @@ struct TranscribeArgs {
     device: String,
     #[arg(long, default_value = "fp32", value_parser = ["int8", "fp16", "fp32"], help = "モデルの数値精度")]
     precision: String,
-    #[arg(long, default_value_t = 4, help = "スレッド数")]
+    #[arg(long, default_value_t = 3, help = "スレッド数")]
     threads: usize,
     #[arg(long = "num-speakers", default_value_t = -1, help = "話者数（-1 は自動判定）")]
     num_speakers: i32,

@@ -74,6 +74,9 @@ impl AsrEngine for Recorder {
         self.texts = outputs.iter().map(|o| o.text.clone()).collect();
         Ok(outputs)
     }
+    fn limit(&self) -> Option<std::sync::Arc<std::sync::atomic::AtomicUsize>> {
+        self.inner.limit()
+    }
 }
 
 /// 中核の文字起こしを、出力を書かずに済ませる。refine から同じ経路を使う。
@@ -207,9 +210,14 @@ pub fn transcribe_core(
     })?;
 
     let _ = kikitori_sherpa::take_diagnostics();
+    let asr_engine_count = match kind {
+        AsrKind::Reazon => asr_workers(args.asr_workers, args.threads),
+        // 長さでまとめて起こすので、区間を1つずつ配ると結果が変わりうる。並列にしない
+        AsrKind::Greedy => 1,
+    };
     let mut asr: Box<dyn AsrEngine> = match kind {
         AsrKind::Reazon => capture::capture_stderr(|| {
-            let engines = (0..asr_workers(args.asr_workers, args.threads))
+            let engines = (0..asr_engine_count)
                 .map(|_| {
                     kikitori_reazon::Reazon::new(&root, args.threads)
                         .map(|engine| Box::new(engine) as Box<dyn AsrEngine>)
@@ -217,7 +225,6 @@ pub fn transcribe_core(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Box::new(kikitori_core::pool::AsrPool::new(engines)) as Box<dyn AsrEngine>)
         }),
-        // 長さでまとめて起こすので、区間を1つずつ配ると結果が変わりうる。並列にしない
         AsrKind::Greedy => capture::capture_stderr(|| {
             kikitori_sherpa::ReazonGreedy::new(&root, model, precision, args.threads)
                 .map(|engine| Box::new(engine) as Box<dyn AsrEngine>)
@@ -230,6 +237,36 @@ pub fn transcribe_core(
         kikitori_sherpa::Pyannote::new(&root, args.threads, args.num_speakers, args.threshold)
     })
     .map_err(process_error)?;
+
+    // 話者分離の並列分を引いても ASR のスレッドが収まるなら、分離の間に認識を始める
+    let seconds = pcm.len() as f64 / SAMPLE_RATE as f64;
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let cap = (cores * 3 / 4).max(1);
+    let asr_threads = args.threads.max(1);
+    let mut overlap_engines = 0usize;
+    if asr.limit().is_some() || asr_engine_count > 0 {
+        if let Some(budget) = cap.checked_sub(asr_threads).filter(|budget| *budget > 0) {
+            diarizer.set_budget(Some(budget));
+            if let Some(diar) = diarizer.parallel_threads(seconds) {
+                if cap > diar {
+                    overlap_engines = ((cap - diar) / asr_threads).min(asr_engine_count);
+                }
+            }
+            if overlap_engines == 0 {
+                diarizer.set_budget(None);
+            }
+        }
+    }
+    let diar_threads = diarizer.parallel_threads(seconds).unwrap_or(asr_threads);
+    if overlap_engines > 0 {
+        log::info(&format!(
+            "話者分離と同時に認識を {overlap_engines} 個動かします（話者分離は {diar_threads} スレッド）。"
+        ));
+    } else {
+        log::info(&format!(
+            "話者分離と認識は同時に動かしません（話者分離は {diar_threads} スレッド）。"
+        ));
+    }
 
     let mut replaced = 0usize;
     let mut replace = |text: &str| -> String {
@@ -248,6 +285,7 @@ pub fn transcribe_core(
     let options = PipelineOptions {
         num_speakers: args.num_speakers,
         fix_overlapping_turn_spans: !args.python_compat,
+        overlap_engines,
         punctuate: punctuate
             .as_ref()
             .map(|f| f as &kikitori_core::pipeline::Punctuate),
