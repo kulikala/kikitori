@@ -7,6 +7,26 @@ HOME_DIR=${HOME:?HOME must be set}
 CONFIG=${XDG_CONFIG_HOME:-$HOME_DIR/.config}/kikitori
 RECEIPT=$CONFIG/receipt.txt
 BIN_DIR=${KIKITORI_INSTALL_DIR:-$HOME_DIR/.local/bin}
+MODELS=${KIKITORI_MODELS:-${XDG_CACHE_HOME:-$HOME_DIR/.cache}/kikitori/models}
+# Mirror base() in crates/kikitori-refine/src/ollama.rs: add the scheme, the default
+# port for http, and treat the wildcard address as localhost.
+normalize_ollama() {
+  value=$1
+  case "$value" in *://*) ;; *) value="http://$value" ;; esac
+  scheme=${value%%://*}
+  rest=${value#*://}
+  rest=${rest%/}
+  if [ "$scheme" = http ]; then
+    case "$rest" in *\]*) tail=${rest##*]} ;; *) tail=$rest ;; esac
+    case "$tail" in *:*) ;; *) rest="$rest:11434" ;; esac
+  fi
+  case "$rest" in
+    0.0.0.0:*) rest="localhost:${rest#*:}" ;;
+    0.0.0.0) rest="localhost:11434" ;;
+  esac
+  printf '%s://%s' "$scheme" "$rest"
+}
+OLLAMA=$(normalize_ollama "${KIKITORI_OLLAMA:-${OLLAMA_HOST:-localhost:11434}}")
 
 remove_receipt() {
   [ -f "$RECEIPT" ] || return 0
@@ -17,12 +37,12 @@ remove_receipt() {
       bin|skill|dict) rm -f "$place" ;;
       models-dir|hf-repo) rm -rf "$place" ;;
       ollama-model)
-        if command -v curl >/dev/null 2>&1 && curl -fsS -X DELETE http://localhost:11434/api/delete -H 'Content-Type: application/json' -d "{\"name\":\"$place\"}" >/dev/null 2>&1; then :;
+        if command -v curl >/dev/null 2>&1 && curl -fsS -X DELETE "$OLLAMA/api/delete" -H 'Content-Type: application/json' -d "{\"name\":\"$place\"}" >/dev/null 2>&1; then :;
         else say "Ollama is not running; kept $place. Remove it with: ollama rm $place"; fi ;;
       *) ;;
     esac
   done < "$RECEIPT"
-  rm -rf "${KIKITORI_MODELS:-$HOME_DIR/.cache/kikitori/models}"
+  rm -rf "$MODELS"
   rm -f "$RECEIPT"
 }
 if [ "${1:-}" = --uninstall ]; then remove_receipt; exit 0; fi

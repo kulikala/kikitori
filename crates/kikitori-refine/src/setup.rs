@@ -331,19 +331,21 @@ pub fn gather(hardware_flag: Option<&str>) -> Result<State, CliError> {
         s.cli = catalog::which("ollama").is_some();
         s.app = osname == "Darwin" && Path::new(APP).exists();
         s.systemd = osname == "Linux" && Path::new("/etc/systemd/system/ollama.service").exists();
-        s.free_ollama = free_space(
-            &std::env::var_os("OLLAMA_MODELS")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| home().join(".ollama")),
-        );
+        // systemd の ollama は /usr/share/ollama にモデルを置く
+        let ollama_models = std::env::var_os("OLLAMA_MODELS")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                if s.systemd {
+                    PathBuf::from("/usr/share/ollama/.ollama/models")
+                } else {
+                    home().join(".ollama/models")
+                }
+            });
+        s.free_ollama = free_space(&ollama_models);
     }
     if refine {
         s.hf_missing = hf_missing();
-        s.free_hf = free_space(
-            &std::env::var_os("HF_HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| home().join(".cache/huggingface")),
-        );
+        s.free_hf = free_space(&kikitori_core::paths::hf_cache_root());
     }
     Ok(s)
 }
@@ -362,6 +364,14 @@ pub fn say(msg: &str) {
 /// 入れる前の確認。/dev/tty に `[y/N]:` を出して読む。TTY が無ければ false。
 pub fn confirm(total: u64) -> bool {
     use std::io::{Read, Write};
+    // Windows の CON は、標準入力がパイプでも開けてしまい、読むと入力を待ち続ける
+    #[cfg(windows)]
+    {
+        use std::io::IsTerminal;
+        if !std::io::stdin().is_terminal() {
+            return false;
+        }
+    }
     let mut tty = match std::fs::OpenOptions::new()
         .read(true)
         .write(true)

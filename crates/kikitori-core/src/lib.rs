@@ -159,6 +159,8 @@ pub enum DeviceChoice {
 pub struct LoadOptions {
     pub device: DeviceChoice,
     pub dtype: Option<DType>,
+    /// エンジンが使うスレッド数（None ならエンジンの既定）
+    pub threads: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

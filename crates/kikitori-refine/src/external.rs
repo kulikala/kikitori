@@ -6,13 +6,19 @@
 //! 本文は PC の外へ出るので、利用者が指定したときだけ使う。
 
 use serde_json::{json, Serializer, Value};
-use std::{io::Write, process::Command, sync::mpsc};
+use std::{
+    io::{Read, Write},
+    process::Command,
+    sync::mpsc,
+};
 
 use crate::prompts;
 
 pub const CHUNK: usize = 60;
 pub const CLAUDE_MODEL: &str = "claude-haiku-5-5";
 const CLAUDE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(600);
+/// 子が終わった後、出力の読み手を待つ上限。孫がパイプを開いたままでも止まらない
+const READER_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// 1 回に渡す区間の数ごとに ask を作る。system は全体 1 回、chunks の各 user が 1 問。
 pub fn bundle(
@@ -80,7 +86,9 @@ pub fn finish_missing_note(miss: &[usize]) {
 }
 
 fn one_claude(system: &str, user: &str) -> String {
-    let mut cmd = Command::new("claude");
+    // PATH から引いた実体で起動する。Windows の npm の claude.cmd も見つかる
+    let program = crate::catalog::which("claude").unwrap_or_else(|| "claude".to_owned());
+    let mut cmd = Command::new(program);
     cmd.args([
         "-p",
         "--model",
@@ -105,12 +113,39 @@ fn one_claude(system: &str, user: &str) -> String {
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(user.as_bytes());
     }
+    // パイプが埋まると子が止まるので、待つ間に stdout と stderr を読み切る
+    let (out_tx, out_rx) = mpsc::channel();
+    let (err_tx, err_rx) = mpsc::channel();
+    if let Some(mut out) = child.stdout.take() {
+        let tx = out_tx.clone();
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = out.read_to_end(&mut buf);
+            let _ = tx.send(buf);
+        });
+    }
+    if let Some(mut err) = child.stderr.take() {
+        let tx = err_tx.clone();
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = err.read_to_end(&mut buf);
+            let _ = tx.send(buf);
+        });
+    }
+    drop(out_tx);
+    drop(err_tx);
     let started = std::time::Instant::now();
-    loop {
+    let status = loop {
         match child.try_wait() {
-            Ok(Some(_)) | Err(_) => break,
+            Ok(Some(status)) => break Some(status),
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
             Ok(None) => {
                 if started.elapsed() > CLAUDE_TIMEOUT {
+                    // 読み手は join しない。孫がパイプを開いたままだと join が返らない
                     let _ = child.kill();
                     let _ = child.wait();
                     warn(format_args!(
@@ -122,11 +157,14 @@ fn one_claude(system: &str, user: &str) -> String {
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
         }
-    }
-    match child.wait_with_output() {
-        Ok(output) => {
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    };
+    // 子が終わっても孫がパイプを持ったままだと EOF が来ない。有限時間だけ待って読めた分を使う
+    let stdout = out_rx.recv_timeout(READER_WAIT).unwrap_or_default();
+    let stderr = err_rx.recv_timeout(READER_WAIT).unwrap_or_default();
+    match status {
+        Some(status) => {
+            if !status.success() {
+                let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
                 let cut = stderr
                     .char_indices()
                     .nth(200)
@@ -137,10 +175,10 @@ fn one_claude(system: &str, user: &str) -> String {
                     &stderr[..cut]
                 ));
             }
-            String::from_utf8_lossy(&output.stdout).into_owned()
+            String::from_utf8_lossy(&stdout).into_owned()
         }
-        Err(e) => {
-            warn(format_args!("警告: claude CLI が失敗しました（{e}）"));
+        None => {
+            warn("警告: claude CLI が失敗しました");
             String::new()
         }
     }

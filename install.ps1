@@ -4,6 +4,20 @@ $ErrorActionPreference = 'Stop'
 $HomeDir = $env:USERPROFILE
 $Root = if ($env:KIKITORI_INSTALL_DIR) { $env:KIKITORI_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\kikitori' }
 $Receipt = Join-Path $env:APPDATA 'kikitori\receipt.txt'
+# Mirror base() in crates/kikitori-refine/src/ollama.rs: add the scheme, the default
+# port for http, and treat the wildcard address as localhost.
+$OllamaValue = if ($env:KIKITORI_OLLAMA) { $env:KIKITORI_OLLAMA } elseif ($env:OLLAMA_HOST) { $env:OLLAMA_HOST } else { 'localhost:11434' }
+if ($OllamaValue -notmatch '^[a-zA-Z][a-zA-Z0-9+.-]*://') { $OllamaValue = "http://$OllamaValue" }
+$OllamaParts = $OllamaValue -split '://', 2
+$OllamaScheme = $OllamaParts[0]
+$OllamaRest = $OllamaParts[1].TrimEnd('/')
+if ($OllamaScheme -eq 'http') {
+    $OllamaTail = if ($OllamaRest.Contains(']')) { $OllamaRest.Substring($OllamaRest.LastIndexOf(']')) } else { $OllamaRest }
+    if (-not $OllamaTail.Contains(':')) { $OllamaRest = "${OllamaRest}:11434" }
+}
+if ($OllamaRest.StartsWith('0.0.0.0:')) { $OllamaRest = 'localhost:' + $OllamaRest.Substring($OllamaRest.IndexOf(':') + 1) }
+elseif ($OllamaRest -eq '0.0.0.0') { $OllamaRest = 'localhost:11434' }
+$Ollama = "${OllamaScheme}://$OllamaRest"
 # Windows PowerShell 5.1 turns a native program's stderr into errors when output is captured
 # (2>&1, or a caller reading the pipes). Run native programs with errors left to $LASTEXITCODE.
 function Invoke-Native([scriptblock]$Block) {
@@ -17,7 +31,13 @@ function Add-Receipt([string]$Kind, [string]$Value) {
     Add-Content -Encoding ASCII -Path $Receipt -Value "$Kind`t$Value"
 }
 function Get-Asset([string]$Name, [string]$Destination) {
-    if ($Base -match '^https?://') { Invoke-WebRequest -UseBasicParsing "$Base/$Name" -OutFile $Destination }
+    if ($Base -match '^https?://') {
+        $savedProgress = $ProgressPreference
+        $ProgressPreference = 'SilentlyContinue'
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        try { Invoke-WebRequest -UseBasicParsing "$Base/$Name" -OutFile $Destination }
+        finally { $ProgressPreference = $savedProgress }
+    }
     else {
         $localBase = $Base -replace '^file://', ''
         Copy-Item -LiteralPath (Join-Path $localBase $Name) -Destination $Destination
@@ -30,7 +50,7 @@ if ($Uninstall) {
             if ($parts.Length -eq 2 -and $parts[0] -in @('bin','skill','dict')) { Remove-Item -Force -ErrorAction SilentlyContinue $parts[1] }
             if ($parts.Length -eq 2 -and $parts[0] -in @('models-dir','hf-repo')) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $parts[1] }
             if ($parts.Length -eq 2 -and $parts[0] -eq 'ollama-model') {
-                try { Invoke-RestMethod -Method Delete -Uri 'http://localhost:11434/api/delete' -ContentType 'application/json' -Body (@{name=$parts[1]} | ConvertTo-Json) | Out-Null }
+                try { Invoke-RestMethod -Method Delete -Uri "$Ollama/api/delete" -ContentType 'application/json' -Body (@{name=$parts[1]} | ConvertTo-Json) | Out-Null }
                 catch { Write-Host "Ollama is not running; kept $($parts[1]). Remove it with: ollama rm $($parts[1])" }
             }
             if ($parts.Length -eq 2 -and $parts[0] -eq 'path-line') {

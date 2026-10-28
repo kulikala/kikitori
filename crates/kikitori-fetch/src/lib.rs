@@ -6,6 +6,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
+use ureq::ResponseExt;
 
 macro_rules! f {
     ($path:literal,$size:literal,$sha:literal,$git:literal) => {
@@ -246,27 +247,65 @@ impl std::fmt::Display for FetchError {
 }
 impl std::error::Error for FetchError {}
 
+macro_rules! tls_builder {
+    ($builder:expr) => {{
+        let mut builder = $builder;
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
+        {
+            builder = builder.tls_config(
+                ureq::tls::TlsConfig::builder()
+                    .provider(ureq::tls::TlsProvider::NativeTls)
+                    .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+                    .build(),
+            );
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        {
+            builder = builder.tls_config(
+                ureq::tls::TlsConfig::builder()
+                    .provider(ureq::tls::TlsProvider::Rustls)
+                    .build(),
+            );
+        }
+        builder
+    }};
+}
+
+/// 大きいファイルの取得用。全体の期限は設けず、接続・名前解決・応答ヘッダーの
+/// 待ち時間と、1 回の読み取りの停滞（進捗が止まった時間）だけを区切る。
+pub fn http_agent_stall(timeout: Duration) -> ureq::Agent {
+    let builder = tls_builder!(ureq::config::Config::builder()
+        .timeout_resolve(Some(timeout))
+        .timeout_connect(Some(timeout))
+        .timeout_recv_response(Some(timeout))
+        .timeout_per_read(Some(timeout))
+        .timeout_global(None)
+        .timeout_recv_body(None));
+    ureq::Agent::new_with_config(builder.build())
+}
+
 /// Construct the HTTP agent shared by downloads and runtime diagnostics.
 pub fn http_agent(timeout: Duration) -> ureq::Agent {
-    let mut builder = ureq::config::Config::builder().timeout_global(Some(timeout));
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    {
-        builder = builder.tls_config(
-            ureq::tls::TlsConfig::builder()
-                .provider(ureq::tls::TlsProvider::NativeTls)
-                .root_certs(ureq::tls::RootCerts::PlatformVerifier)
-                .build(),
-        );
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        builder = builder.tls_config(
-            ureq::tls::TlsConfig::builder()
-                .provider(ureq::tls::TlsProvider::Rustls)
-                .build(),
-        );
-    }
+    let builder = tls_builder!(ureq::config::Config::builder().timeout_global(Some(timeout)));
     ureq::Agent::new_with_config(builder.build())
+}
+
+/// GitHub の `releases/latest` の転送先（`/tag/vX.Y.Z`）から版を読む。
+/// `api.github.com` を使わないので、回数制限の影響を受けない。
+pub fn resolve_latest_tag(url: &str) -> Result<String, FetchError> {
+    let agent = http_agent(Duration::from_secs(30));
+    let response = agent
+        .get(url)
+        .call()
+        .map_err(|e| FetchError::Http(e.to_string()))?;
+    let final_url = response.get_uri().to_string();
+    let tag = final_url.rsplit_once("/tag/v").map_or("", |(_, tag)| tag);
+    if tag.is_empty() || !tag.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        return Err(FetchError::Http(format!(
+            "latest release redirect has no version tag: {final_url}"
+        )));
+    }
+    Ok(tag.to_owned())
 }
 
 #[derive(Clone, Debug)]
@@ -425,7 +464,8 @@ fn link_or_copy(src: &Path, dst: &Path) -> Result<PathBuf, FetchError> {
         Ok(dst.to_path_buf())
     }
 }
-fn sha256_file(path: &Path) -> Result<String, FetchError> {
+/// ファイルの SHA-256（小文字の 16 進）。
+pub fn sha256_file(path: &Path) -> Result<String, FetchError> {
     let mut f = fs::File::open(path).map_err(ioe)?;
     let mut h = Sha256::new();
     let mut b = [0; 65536];
@@ -573,6 +613,10 @@ fn replace_file(from: &Path, to: &Path) -> Result<(), FetchError> {
     fs::rename(from, to).map_err(ioe)
 }
 
+/// 本文の転送が止まったとみなす時間。全体の期限は設けない（大きいモデルを落とせるように）。
+const DOWNLOAD_STALL: Duration = Duration::from_secs(60);
+const DOWNLOAD_ATTEMPTS: u32 = 4;
+
 pub fn download(
     url: &str,
     dest: &Path,
@@ -592,8 +636,14 @@ pub fn download(
     // Each call owns a unique partial file. Keeping it across attempts allows byte-range resume.
     let part = unique_temp(dest);
     let mut offset = 0u64;
-    for attempt in 1..=4 {
-        let agent = http_agent(Duration::from_secs(90));
+    // このファイルでこれまでに到達した最大バイト数。Range を無視するサーバーに
+    // 200 が返ると offset は 0 に戻るので、進んだかどうかはこの値で判断する
+    let mut high_water = 0u64;
+    // 進んだ回は数え直す。進まない試行だけを最大 4 回に制限する
+    let mut attempts_without_progress = 0u32;
+    loop {
+        attempts_without_progress += 1;
+        let agent = http_agent_stall(DOWNLOAD_STALL);
         let mut req = agent.get(url);
         if offset > 0 {
             req = req.header("Range", &format!("bytes={offset}-"))
@@ -601,7 +651,7 @@ pub fn download(
         let response = match req.call() {
             Ok(r) => r,
             Err(e) => {
-                if attempt == 4 {
+                if attempts_without_progress >= DOWNLOAD_ATTEMPTS {
                     let _ = fs::remove_file(&part);
                     return Err(FetchError::Http(e.to_string()));
                 }
@@ -639,30 +689,40 @@ pub fn download(
             }
         }
         f.flush().map_err(ioe)?;
+        let progressed = done > high_water;
+        if progressed {
+            high_water = done;
+        }
         if interrupted {
             offset = done;
-            if attempt < 4 {
-                continue;
+            if progressed {
+                attempts_without_progress = 0;
             }
-            let _ = fs::remove_file(&part);
-            return Err(FetchError::Http(
-                "connection interrupted after retries".into(),
-            ));
+            if attempts_without_progress >= DOWNLOAD_ATTEMPTS {
+                let _ = fs::remove_file(&part);
+                return Err(FetchError::Http(
+                    "connection interrupted after retries".into(),
+                ));
+            }
+            continue;
         }
         if size.is_some_and(|n| n != done) {
             offset = done;
-            if attempt < 4 {
-                continue;
+            if progressed {
+                attempts_without_progress = 0;
             }
-            let _ = fs::remove_file(&part);
-            return Err(FetchError::Integrity(format!(
-                "short download: expected {}, got {done}",
-                size.unwrap()
-            )));
+            if attempts_without_progress >= DOWNLOAD_ATTEMPTS {
+                let _ = fs::remove_file(&part);
+                return Err(FetchError::Integrity(format!(
+                    "short download: expected {}, got {done}",
+                    size.unwrap()
+                )));
+            }
+            continue;
         }
         if !verify(&part, sha, None, size)? {
             let _ = fs::remove_file(&part);
-            if attempt < 4 {
+            if attempts_without_progress < DOWNLOAD_ATTEMPTS {
                 offset = 0;
                 continue;
             }
@@ -673,7 +733,6 @@ pub fn download(
         replace_file(&part, dest)?;
         return Ok(());
     }
-    unreachable!()
 }
 
 pub fn receipt_path() -> PathBuf {

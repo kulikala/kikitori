@@ -75,6 +75,78 @@ fn resumes_after_cut_and_replays_range_after_redirect() {
 }
 
 #[test]
+fn progress_resets_the_attempt_budget() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let body = b"hello";
+    let server = thread::spawn(move || {
+        // 1 回につき 1 バイトだけ返して切る。4 回を超えても、進んだ回は数え直す
+        for sent in 0..body.len() {
+            let (mut s, _) = listener.accept().unwrap();
+            let req = request(&mut s).to_ascii_lowercase();
+            if sent == 0 {
+                assert!(!req.contains("range:"));
+            } else {
+                assert!(req.contains(&format!("range: bytes={sent}-")));
+            }
+            reply(
+                &mut s,
+                "206 Partial Content\r\nContent-Length: 1",
+                &body[sent..=sent],
+            );
+            drop(s);
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("download");
+    let hash = hex::encode(Sha256::digest(body));
+    download(
+        &format!("http://{addr}/file"),
+        &path,
+        Some(body.len() as u64),
+        Some(&hash),
+        false,
+        |_, _| {},
+    )
+    .unwrap();
+    server.join().unwrap();
+    assert_eq!(fs::read(path).unwrap(), body);
+}
+
+#[test]
+fn gives_up_when_server_ignores_range_and_cuts_at_the_same_byte() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let body = b"012345678";
+    let server = thread::spawn(move || {
+        // Range を無視して毎回 200 で同じ 3 バイトだけ返す。進まない試行だけを数える
+        for _ in 0..=DOWNLOAD_ATTEMPTS {
+            let (mut s, _) = listener.accept().unwrap();
+            let _ = request(&mut s);
+            reply(
+                &mut s,
+                &format!("200 OK\r\nContent-Length: {}", body.len()),
+                &body[..3],
+            );
+            drop(s);
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("download");
+    let result = download(
+        &format!("http://{addr}/file"),
+        &path,
+        Some(body.len() as u64),
+        Some(&hex::encode(Sha256::digest(body))),
+        false,
+        |_, _| {},
+    );
+    assert!(result.is_err(), "must give up after the attempt limit");
+    server.join().unwrap();
+    assert!(!path.exists());
+}
+
+#[test]
 fn checksum_mismatch_never_places_destination() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();

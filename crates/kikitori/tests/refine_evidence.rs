@@ -256,6 +256,7 @@ fn refine_evidence_matches_direct_engine_cuts() {
         LoadOptions {
             device: DeviceChoice::Cpu,
             dtype: Some(DType::F32),
+            threads: None,
         },
         4,
     )
@@ -276,6 +277,7 @@ fn refine_evidence_matches_direct_engine_cuts() {
         LoadOptions {
             device: DeviceChoice::Cpu,
             dtype: Some(DType::F32),
+            threads: None,
         },
         4,
     )

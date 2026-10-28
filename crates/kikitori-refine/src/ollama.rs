@@ -7,11 +7,12 @@
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, io::BufRead, time::Duration};
 
-use kikitori_fetch::http_agent;
+use kikitori_fetch::{http_agent, http_agent_stall};
 
 pub const DEFAULT: &str = "http://localhost:11434";
 pub const CHAT_TIMEOUT: Duration = Duration::from_secs(1200);
-pub const PULL_TIMEOUT: Duration = Duration::from_secs(3600);
+/// 取得は全体の期限を設けず、進捗行が来ない時間で打ち切る。
+pub const PULL_STALL: Duration = Duration::from_secs(120);
 pub const SMALL_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Resolve the endpoint base. `explicit` wins over the environment.
@@ -57,14 +58,17 @@ pub fn base(explicit: Option<&str>) -> String {
 
 /// Whether the endpoint is this PC (localhost).
 pub fn is_local(base: &str) -> bool {
-    let host = match base.split_once("://") {
-        Some((_, rest)) => match rest.split_once(':') {
-            Some((h, _)) => h,
-            None => rest,
-        },
-        None => return false,
+    let rest = base.split_once("://").map_or(base, |(_, rest)| rest);
+    let host = if rest.starts_with('[') {
+        // [::1]:11434 の ':' で切らず、閉じ括弧までをホスト名にする
+        rest.split_once(']').map_or(rest, |(host, _)| host)
+    } else {
+        rest.split_once(':').map_or(rest, |(host, _)| host)
     };
-    matches!(host, "localhost" | "127.0.0.1" | "[::1]")
+    matches!(
+        host.trim_start_matches('[').trim_end_matches(']'),
+        "localhost" | "127.0.0.1" | "::1"
+    )
 }
 
 fn parse_json(bytes: &[u8]) -> Option<Value> {
@@ -171,7 +175,7 @@ pub fn systemone(at: &str, body: &Value) -> Result<Value, String> {
 /// Pull a model via /api/pull. Re-running resumes an interrupted pull.
 pub fn pull(at: &str, model: &str, mut log: impl FnMut(&str)) -> Result<(), String> {
     let body = json!({"model": model, "stream": true});
-    let agent = http_agent(PULL_TIMEOUT);
+    let agent = http_agent_stall(PULL_STALL);
     let response = agent
         .post(format!("{at}/api/pull"))
         .header("Content-Type", "application/json")
@@ -215,4 +219,18 @@ pub fn pull(at: &str, model: &str, mut log: impl FnMut(&str)) -> Result<(), Stri
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_local;
+
+    #[test]
+    fn local_endpoints_include_bracketed_ipv6() {
+        assert!(is_local("localhost:11434"));
+        assert!(is_local("127.0.0.1:11434"));
+        assert!(is_local("[::1]:11434"));
+        assert!(is_local("http://[::1]:11434"));
+        assert!(!is_local("example.com:11434"));
+    }
 }

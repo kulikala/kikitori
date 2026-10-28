@@ -325,21 +325,27 @@ impl Pyannote {
             .clamp(1, cores.saturating_sub(1).max(1))
     }
 
-    /// `indices` の区間の話者埋め込みを、長さ 1 に揃えて返す。
-    fn embed(
+    /// スレッドごとに 1 つ作った抽出器を使い回す。
+    fn extractor(
         model: &std::path::Path,
         threads: usize,
-        pcm: &[f32],
-        turns: &[SpeakerSpan],
-        indices: &[usize],
-    ) -> Result<Vec<Vec<f64>>, String> {
-        let extractor = SpeakerEmbeddingExtractor::create(&SpeakerEmbeddingExtractorConfig {
+    ) -> Result<SpeakerEmbeddingExtractor, String> {
+        SpeakerEmbeddingExtractor::create(&SpeakerEmbeddingExtractorConfig {
             model: Some(model.display().to_string()),
             num_threads: threads as i32,
             provider: Some("cpu".to_owned()),
             ..SpeakerEmbeddingExtractorConfig::default()
         })
-        .ok_or_else(|| "話者埋め込みモデルを作成できませんでした。".to_owned())?;
+        .ok_or_else(|| "話者埋め込みモデルを作成できませんでした。".to_owned())
+    }
+
+    /// `indices` の区間の話者埋め込みを、長さ 1 に揃えて返す。
+    fn embed(
+        extractor: &SpeakerEmbeddingExtractor,
+        pcm: &[f32],
+        turns: &[SpeakerSpan],
+        indices: &[usize],
+    ) -> Result<Vec<Vec<f64>>, String> {
         let mut vectors = Vec::with_capacity(indices.len());
         for &index in indices {
             let turn = &turns[index];
@@ -388,7 +394,10 @@ impl Pyannote {
             let handles: Vec<_> = keep
                 .chunks(chunk)
                 .map(|indices| {
-                    scope.spawn(move || Self::embed(model, threads, pcm, turns_ref, indices))
+                    scope.spawn(move || {
+                        let extractor = Self::extractor(model, threads)?;
+                        Self::embed(&extractor, pcm, turns_ref, indices)
+                    })
                 })
                 .collect();
             handles
@@ -510,12 +519,6 @@ impl Pyannote {
             .map(|(workers, _, instance)| workers * instance)
     }
 
-    /// チャンクに分けるときの数。分けないときは None。
-    pub fn chunk_count(&self, total_seconds: f64) -> Option<usize> {
-        self.plan(total_seconds)
-            .map(|_| chunk_count(total_seconds, chunk_override()))
-    }
-
     /// チャンクごとの話者分離に使うスレッド数。KIKITORI_DIAR_THREADS は全体の上限のまま。
     fn instance_threads(&self) -> usize {
         std::env::var("KIKITORI_DIAR_INSTANCE_THREADS")
@@ -578,6 +581,11 @@ impl Pyannote {
                 .map(|_| {
                     scope.spawn(move || {
                         let mut turns = Vec::new();
+                        // 1 チャンクごとに作らず、このスレッドで 1 つ作って使い回す
+                        let Some(diarizer) = OfflineSpeakerDiarization::create(config) else {
+                            failed.store(true, std::sync::atomic::Ordering::Relaxed);
+                            return turns;
+                        };
                         loop {
                             let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             let Some(&(start, end)) = chunks.get(index) else {
@@ -589,10 +597,6 @@ impl Pyannote {
                             if hi.saturating_sub(lo) < SAMPLE_RATE {
                                 continue;
                             }
-                            let Some(diarizer) = OfflineSpeakerDiarization::create(config) else {
-                                failed.store(true, std::sync::atomic::Ordering::Relaxed);
-                                continue;
-                            };
                             let Some(result) = diarizer.process(&pcm[lo..hi]) else {
                                 failed.store(true, std::sync::atomic::Ordering::Relaxed);
                                 continue;
@@ -705,6 +709,7 @@ impl Pyannote {
             let handles: Vec<_> = (0..workers.min(tasks.len()))
                 .map(|_| {
                     scope.spawn(move || {
+                        let extractor = Self::extractor(embedding, threads)?;
                         let mut output = Vec::new();
                         loop {
                             let task = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -715,8 +720,7 @@ impl Pyannote {
                             for &group in groups {
                                 flat.extend_from_slice(&indices[group]);
                             }
-                            let vectors =
-                                Self::embed(embedding, threads, pcm, selected_ref, &flat)?;
+                            let vectors = Self::embed(&extractor, pcm, selected_ref, &flat)?;
                             let mut vectors = vectors.into_iter();
                             output.extend(groups.iter().map(|&group| {
                                 let count = indices[group].len();

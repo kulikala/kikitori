@@ -667,6 +667,7 @@ pub(crate) fn run(
             LoadOptions {
                 device: setup.device,
                 dtype: setup.dtype,
+                threads: Some(args.threads),
             },
             |done, total| crate::log::progress("B（Qwen3-ASR）", done as u64, Some(total as u64)),
         )?;
@@ -679,6 +680,7 @@ pub(crate) fn run(
             LoadOptions {
                 device: setup.device,
                 dtype: setup.dtype,
+                threads: Some(args.threads),
             },
             |done, total| {
                 crate::log::progress("K（kana-whisper）", done as u64, Some(total as u64))

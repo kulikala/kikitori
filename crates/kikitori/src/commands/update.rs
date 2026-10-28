@@ -53,22 +53,13 @@ pub fn run(version: Option<String>, variant: Option<String>, dry_run: bool) -> R
                 .max()
                 .ok_or("no matching release asset in local directory")?;
         } else {
+            // install.sh と同じく、/releases/latest の転送先から版を読む（API は使わない）
             let repo =
                 std::env::var("KIKITORI_REPO").unwrap_or_else(|_| "kulikala/kikitori".into());
-            let out = Command::new("curl")
-                .args([
-                    "-fsSL",
-                    &format!("https://api.github.com/repos/{repo}/releases/latest"),
-                ])
-                .output()
-                .map_err(|e| e.to_string())?;
-            let json: serde_json::Value =
-                serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
-            version = json["tag_name"]
-                .as_str()
-                .ok_or("latest release has no tag")?
-                .trim_start_matches('v')
-                .to_owned();
+            version = kikitori_fetch::resolve_latest_tag(&format!(
+                "https://github.com/{repo}/releases/latest"
+            ))
+            .map_err(|e| e.to_string())?;
         }
     }
     let asset = format!(
@@ -182,10 +173,12 @@ pub fn run(version: Option<String>, variant: Option<String>, dry_run: bool) -> R
 fn download(url: &str, path: &std::path::Path) -> Result<(), String> {
     if let Some(local) = url.strip_prefix("file://") {
         fs::copy(local, path).map_err(|e| e.to_string())?;
-    } else if std::path::Path::new(url).exists() {
-        fs::copy(url, path).map_err(|e| e.to_string())?;
+    } else if url.starts_with("http://") || url.starts_with("https://") {
+        // 外部の curl を使わず、取得と再開は kikitori_fetch に任せる
+        kikitori_fetch::download(url, path, None, None, false, |_, _| {})
+            .map_err(|e| e.to_string())?;
     } else {
-        run_cmd("curl", &["-fsSL", url, "-o", path.to_str().unwrap()])?;
+        fs::copy(url, path).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -201,23 +194,6 @@ fn run_cmd(cmd: &str, args: &[&str]) -> Result<(), String> {
     }
 }
 fn hash_file(path: &std::path::Path) -> Result<String, String> {
-    let output = if cfg!(windows) {
-        Command::new("certutil")
-            .args(["-hashfile", path.to_str().unwrap(), "SHA256"])
-            .output()
-    } else {
-        Command::new("shasum")
-            .args(["-a", "256", path.to_str().unwrap()])
-            .output()
-    }
-    .map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        return Err("SHA-256 utility failed".into());
-    }
-    let s = String::from_utf8_lossy(&output.stdout);
-    Ok(if cfg!(windows) {
-        s.lines().nth(1).unwrap_or("").trim().to_ascii_lowercase()
-    } else {
-        s.split_whitespace().next().unwrap_or("").to_owned()
-    })
+    // shasum / certutil は環境によって無いので、同じプロセスで計算する
+    kikitori_fetch::sha256_file(path).map_err(|e| e.to_string())
 }

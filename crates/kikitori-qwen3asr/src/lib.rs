@@ -263,7 +263,7 @@ pub fn specs() -> &'static [kikitori_core::registry::EngineSpec] {
             .paths
             .first()
             .ok_or_else(|| "no model directory supplied".to_owned())?;
-        Engine::load(dir, *o, 4)
+        Engine::load(dir, *o, o.threads.unwrap_or(4))
             .map(|e| Box::new(e) as Box<dyn AsrEngine>)
             .map_err(|e| e.to_string())
     }
@@ -326,6 +326,7 @@ mod integration {
             LoadOptions {
                 device: DeviceChoice::Cpu,
                 dtype: Some(DType::F32),
+                threads: None,
             },
             4,
         )

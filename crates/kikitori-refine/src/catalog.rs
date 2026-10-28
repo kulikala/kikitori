@@ -8,7 +8,7 @@
 
 use kikitori_core::CliError;
 use std::process::{Command, Stdio};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{mpsc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 fn ram_override() -> &'static Mutex<Option<u64>> {
@@ -91,39 +91,55 @@ pub fn size_of(model: &str) -> u64 {
         .unwrap_or(0)
 }
 
+/// 子が終わった後、出力の読み手を待つ上限。孫がパイプを開いたままでも止まらない
+const READER_WAIT: Duration = Duration::from_secs(5);
+
 fn run_capture(program: &str, args: &[&str]) -> String {
     if let Some(hook) = run_override().lock().unwrap().as_ref() {
         return hook(program, args).trim().to_owned();
     }
     let deadline = Instant::now() + Duration::from_secs(10);
-    match Command::new(program)
+    let mut child = match Command::new(program)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
     {
-        Ok(mut child) => loop {
-            match child.try_wait() {
-                Ok(Some(_)) => {
-                    return child
-                        .stdout
-                        .take()
-                        .map(|mut out| {
-                            let mut buf = Vec::new();
-                            let _ = std::io::Read::read_to_end(&mut out, &mut buf);
-                            String::from_utf8_lossy(&buf).trim().to_owned()
-                        })
-                        .unwrap_or_default();
-                }
-                Ok(None) if Instant::now() >= deadline => {
-                    let _ = child.kill();
-                    return String::new();
-                }
-                Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-                Err(_) => return String::new(),
+        Ok(child) => child,
+        Err(_) => return String::new(),
+    };
+    // 待つ間に stdout を読み切る。パイプが埋まって子が止まるのを避ける
+    let (tx, rx) = mpsc::channel();
+    if let Some(mut out) = child.stdout.take() {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut out, &mut buf);
+            let _ = tx.send(buf);
+        });
+    }
+    drop(tx);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                // 子が終わっても、孫がパイプを持ったままだと EOF が来ない。
+                // そのため読み手は有限時間だけ待ち、読めた分を使う
+                let buf = rx.recv_timeout(READER_WAIT).unwrap_or_default();
+                return String::from_utf8_lossy(&buf).trim().to_owned();
             }
-        },
-        Err(_) => String::new(),
+            Ok(None) if Instant::now() >= deadline => {
+                // 読み手は join しない（パイプが閉じないと join が返らない）
+                let _ = child.kill();
+                let _ = child.wait();
+                return String::new();
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return String::new();
+            }
+        }
     }
 }
 
@@ -194,18 +210,55 @@ pub fn which(name: &str) -> Option<String> {
         .map(|p| p.display().to_string())
 }
 
+/// Windows の選択規則を、あるフォルダにあるファイル名の一覧に対して適用する。
+/// PATHEXT の拡張子を先に試し、裸の名前は既に PATHEXT の拡張子を持つ場合だけ受け入れる。
+/// 全 OS でテストできるよう、ファイルシステムに触れない純関数にしてある。
+#[cfg_attr(not(windows), allow(dead_code))]
+fn pick_windows(name: &str, extensions: &[&str], existing: &[&str]) -> Option<String> {
+    for extension in extensions {
+        let candidate = format!("{name}{extension}");
+        if let Some(found) = existing.iter().find(|f| f.eq_ignore_ascii_case(&candidate)) {
+            return Some((*found).to_owned());
+        }
+    }
+    let listed = std::path::Path::new(name)
+        .extension()
+        .map(|ext| format!(".{}", ext.to_string_lossy().to_ascii_lowercase()))
+        .is_some_and(|ext| extensions.iter().any(|e| e.to_ascii_lowercase() == ext));
+    if listed {
+        if let Some(found) = existing.iter().find(|f| f.eq_ignore_ascii_case(name)) {
+            return Some((*found).to_owned());
+        }
+    }
+    None
+}
+
 #[cfg(windows)]
 pub fn which(name: &str) -> Option<String> {
     if let Some(hook) = which_override().lock().unwrap().as_ref() {
         return hook(name);
     }
-    let base = name.to_owned() + ".exe";
-    std::env::var_os("PATH")?
-        .to_string_lossy()
-        .split(';')
-        .map(|dir| std::path::PathBuf::from(dir).join(&base))
-        .find(|p| p.is_file())
-        .map(|p| p.display().to_string())
+    let path = std::env::var_os("PATH")?;
+    // npm の claude.cmd のような .cmd / .bat も見つける
+    let pathext = std::env::var_os("PATHEXT")
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".to_owned());
+    let extensions: Vec<&str> = pathext.split(';').filter(|ext| !ext.is_empty()).collect();
+    for dir in std::env::split_paths(&path) {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        let names: Vec<String> = entries
+            .flatten()
+            .filter(|entry| entry.path().is_file())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .collect();
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        if let Some(found) = pick_windows(name, &extensions, &refs) {
+            return Some(dir.join(found).display().to_string());
+        }
+    }
+    None
 }
 
 fn detect_kind(override_value: Option<&str>, with_darwin_arm: bool) -> Result<Hardware, CliError> {
@@ -338,4 +391,38 @@ pub fn candidates_for(kind: &str, role: &str) -> Vec<&'static str> {
         }
     }
     Vec::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_windows;
+
+    const PATHEXT: [&str; 4] = [".COM", ".EXE", ".BAT", ".CMD"];
+
+    #[test]
+    fn windows_prefers_a_pathext_file_over_a_bare_shim() {
+        // npm の sh シム `claude` より `claude.cmd` を選ぶ
+        assert_eq!(
+            pick_windows("claude", &PATHEXT, &["claude", "claude.cmd"]).as_deref(),
+            Some("claude.cmd")
+        );
+    }
+
+    #[test]
+    fn windows_tries_pathext_in_order() {
+        assert_eq!(
+            pick_windows("claude", &PATHEXT, &["claude.cmd", "claude.exe"]).as_deref(),
+            Some("claude.exe")
+        );
+    }
+
+    #[test]
+    fn windows_accepts_a_bare_name_only_with_a_listed_extension() {
+        assert_eq!(
+            pick_windows("tool.cmd", &PATHEXT, &["tool.cmd"]).as_deref(),
+            Some("tool.cmd")
+        );
+        assert_eq!(pick_windows("claude", &PATHEXT, &["claude"]), None);
+        assert_eq!(pick_windows("tool.py", &PATHEXT, &["tool.py"]), None);
+    }
 }
