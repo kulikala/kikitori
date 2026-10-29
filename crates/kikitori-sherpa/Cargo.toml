@@ -7,5 +7,5 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-kikitori-core = { version = "0.6.0", path = "../kikitori-core" }
+kikitori-core = { version = "0.7.0-dev", path = "../kikitori-core" }
 sherpa-onnx = { version = "=2.0.0", default-features = false, features = ["static"] }

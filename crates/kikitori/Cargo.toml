@@ -19,17 +19,17 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
-kikitori-core = { version = "0.6.0", path = "../kikitori-core" }
-kikitori-refine = { version = "0.6.0", path = "../kikitori-refine" }
-kikitori-dict = { version = "0.6.0", path = "../kikitori-dict" }
-kikitori-qwen3asr = { version = "0.6.0", path = "../kikitori-qwen3asr" }
-kikitori-whisper = { version = "0.6.0", path = "../kikitori-whisper" }
+kikitori-core = { version = "0.7.0-dev", path = "../kikitori-core" }
+kikitori-refine = { version = "0.7.0-dev", path = "../kikitori-refine" }
+kikitori-dict = { version = "0.7.0-dev", path = "../kikitori-dict" }
+kikitori-qwen3asr = { version = "0.7.0-dev", path = "../kikitori-qwen3asr" }
+kikitori-whisper = { version = "0.7.0-dev", path = "../kikitori-whisper" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-kikitori-fetch = { version = "0.6.0", path = "../kikitori-fetch" }
-kikitori-audio = { version = "0.6.0", path = "../kikitori-audio" }
-kikitori-sherpa = { version = "0.6.0", path = "../kikitori-sherpa" }
-kikitori-reazon = { version = "0.6.0", path = "../kikitori-reazon" }
+kikitori-fetch = { version = "0.7.0-dev", path = "../kikitori-fetch" }
+kikitori-audio = { version = "0.7.0-dev", path = "../kikitori-audio" }
+kikitori-sherpa = { version = "0.7.0-dev", path = "../kikitori-sherpa" }
+kikitori-reazon = { version = "0.7.0-dev", path = "../kikitori-reazon" }
 sysinfo = "0.30"
 libc = "0.2"
 
