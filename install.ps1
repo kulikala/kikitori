@@ -47,8 +47,8 @@ if ($Uninstall) {
     if (Test-Path $Receipt) {
         foreach ($line in [IO.File]::ReadAllLines($Receipt)) {
             $parts = $line -split "`t", 2
-            if ($parts.Length -eq 2 -and $parts[0] -in @('bin','skill','dict')) { Remove-Item -Force -ErrorAction SilentlyContinue $parts[1] }
-            if ($parts.Length -eq 2 -and $parts[0] -in @('models-dir','hf-repo')) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $parts[1] }
+            if ($parts.Length -eq 2 -and $parts[0] -in @('bin','skill')) { Remove-Item -Force -ErrorAction SilentlyContinue $parts[1] }
+            if ($parts.Length -eq 2 -and $parts[0] -in @('models-dir','hf-repo','dict')) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $parts[1] }
             if ($parts.Length -eq 2 -and $parts[0] -eq 'ollama-model') {
                 try { Invoke-RestMethod -Method Delete -Uri "$Ollama/api/delete" -ContentType 'application/json' -Body (@{name=$parts[1]} | ConvertTo-Json) | Out-Null }
                 catch { Write-Host "Ollama is not running; kept $($parts[1]). Remove it with: ollama rm $($parts[1])" }

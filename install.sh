@@ -34,8 +34,8 @@ remove_receipt() {
     [ -n "${place:-}" ] || continue
     case "$kind" in
       path-line) [ -f "$place" ] && sed '/# added by kikitori/d' "$place" > "$place.kikitori-tmp" && mv "$place.kikitori-tmp" "$place" ;;
-      bin|skill|dict) rm -f "$place" ;;
-      models-dir|hf-repo) rm -rf "$place" ;;
+      bin|skill) rm -f "$place" ;;
+      models-dir|hf-repo|dict) rm -rf "$place" ;;
       ollama-model)
         if command -v curl >/dev/null 2>&1 && curl -fsS -X DELETE "$OLLAMA/api/delete" -H 'Content-Type: application/json' -d "{\"name\":\"$place\"}" >/dev/null 2>&1; then :;
         else say "Ollama is not running; kept $place. Remove it with: ollama rm $place"; fi ;;
