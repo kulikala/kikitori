@@ -18,6 +18,9 @@ pub struct PipelineOptions<'a> {
     /// Noise added before and after each piece, in seconds. ReazonSpeech drops the first words
     /// of a piece that starts with too little quiet before it.
     pub pad: f64,
+    /// Level (dBFS of the loud frames) each piece is raised to before ASR; `None` leaves it as
+    /// recorded. ReazonSpeech drops whole utterances from quiet pieces.
+    pub level: Option<f32>,
     /// Skip diarization-only spans that overlap one already added from diarization.
     pub fix_overlapping_turn_spans: bool,
     /// Adds punctuation to a piece's text. Gets the text and the offsets (counted in
@@ -34,6 +37,7 @@ impl Default for PipelineOptions<'_> {
             num_speakers: -1,
             min_piece: 0.5,
             pad: 1.0,
+            level: Some(-20.0),
             fix_overlapping_turn_spans: true,
             punctuate: None,
         }
@@ -384,7 +388,14 @@ fn turn_list(mut turns: Vec<SpeakerSpan>) -> Vec<SpeakerSpan> {
 }
 
 /// 区間の前後に、隣の区間との隙間の半分（最大 0.4 秒）と指定の余白を足した波形を作る。
-fn pad_waves(pieces: &[SpeakerSpan], pcm: &[f32], total: f64, pad: f64) -> Vec<Vec<f32>> {
+/// `level` があれば、余白の雑音は変えずに、区間の音だけをその音量まで上げる。
+fn pad_waves(
+    pieces: &[SpeakerSpan],
+    pcm: &[f32],
+    total: f64,
+    pad: f64,
+    level: Option<f32>,
+) -> Vec<Vec<f32>> {
     let mut bounds: Vec<f64> = pieces.iter().flat_map(|p| [p.start, p.end]).collect();
     bounds.sort_by(f64::total_cmp);
     bounds.dedup_by(|a, b| *a == *b);
@@ -408,7 +419,11 @@ fn pad_waves(pieces: &[SpeakerSpan], pcm: &[f32], total: f64, pad: f64) -> Vec<V
         let start = ((piece.start - left_pad) * SAMPLE_RATE as f64) as usize;
         let end = ((piece.end + right_pad) * SAMPLE_RATE as f64) as usize;
         let mut wave = noise(pad - left_pad, &mut rng);
-        wave.extend_from_slice(&pcm[start.min(pcm.len())..end.min(pcm.len())]);
+        let slice = &pcm[start.min(pcm.len())..end.min(pcm.len())];
+        match level.map_or(1.0, |target| level_gain(slice, target)) {
+            gain if gain > 1.0 => wave.extend(slice.iter().map(|v| soft_limit(v * gain))),
+            _ => wave.extend_from_slice(slice),
+        }
         wave.extend(noise(pad - right_pad, &mut rng));
         waves.push(wave);
     }
@@ -422,7 +437,7 @@ fn transcribe_pieces(
     total: f64,
     options: &PipelineOptions<'_>,
 ) -> Result<Vec<AsrOutput>, String> {
-    let waves = pad_waves(pieces, pcm, total, options.pad);
+    let waves = pad_waves(pieces, pcm, total, options.pad, options.level);
     let timestamps = asr.capabilities().timestamps;
     let requests: Vec<AsrRequest<'_>> = waves
         .iter()
@@ -494,6 +509,36 @@ fn build_segments(
     segments
 }
 
+/// Gain that brings the loud frames (90th percentile of 0.1 s RMS) of `wave` to `target` dBFS.
+/// Never below 1 and at most +18 dB; [`soft_limit`] keeps the peaks in range.
+fn level_gain(wave: &[f32], target: f32) -> f32 {
+    let mut levels: Vec<f32> = wave
+        .chunks(SAMPLE_RATE / 10)
+        .map(|frame| (frame.iter().map(|v| v * v).sum::<f32>() / frame.len() as f32).sqrt())
+        .collect();
+    if levels.is_empty() {
+        return 1.0;
+    }
+    let rank = (levels.len() - 1) * 9 / 10;
+    let loud = *levels.select_nth_unstable_by(rank, f32::total_cmp).1;
+    if loud <= 0.0 {
+        return 1.0;
+    }
+    (10.0_f32.powf(target / 20.0) / loud)
+        .min(10.0_f32.powf(18.0 / 20.0))
+        .max(1.0)
+}
+
+/// Leaves samples up to 0.8 alone and bends louder ones toward 1.0.
+fn soft_limit(v: f32) -> f32 {
+    let a = v.abs();
+    if a <= 0.8 {
+        v
+    } else {
+        v.signum() * (0.8 + 0.2 * ((a - 0.8) / 0.2).tanh())
+    }
+}
+
 fn noise(seconds: f64, rng: &mut StdRng) -> Vec<f32> {
     let count = (seconds * SAMPLE_RATE as f64) as usize;
     (0..count)
@@ -541,6 +586,59 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!((result[0].speaker, result[1].speaker), (0, 1));
         assert_eq!((result[0].start, result[0].end), (0.0, 2.0));
+    }
+
+    #[test]
+    fn quiet_pieces_are_raised_to_the_level_and_loud_ones_left_alone() {
+        let quiet = vec![0.01_f32; SAMPLE_RATE];
+        assert!((level_gain(&quiet, -20.0) - 7.94).abs() < 0.05); // capped at +18 dB
+        let near = vec![0.05_f32; SAMPLE_RATE];
+        assert!((level_gain(&near, -20.0) - 2.0).abs() < 0.01);
+        let loud = vec![0.3_f32; SAMPLE_RATE];
+        assert_eq!(level_gain(&loud, -20.0), 1.0);
+        assert_eq!(level_gain(&[], -20.0), 1.0);
+        assert_eq!(level_gain(&[0.0; 1600], -20.0), 1.0);
+    }
+
+    #[test]
+    fn soft_limit_keeps_peaks_within_one() {
+        assert_eq!(soft_limit(0.5), 0.5);
+        assert_eq!(soft_limit(-0.8), -0.8);
+        assert!(soft_limit(3.0) <= 1.0 && soft_limit(3.0) > 0.99);
+        assert!(soft_limit(-3.0) >= -1.0);
+        assert!(soft_limit(0.9) < 0.9 && soft_limit(0.9) > soft_limit(0.85));
+    }
+
+    #[test]
+    fn only_the_speech_is_raised_not_the_pad_noise() {
+        let pieces = [SpeakerSpan {
+            start: 1.0,
+            end: 2.0,
+            speaker: 0,
+        }];
+        let pcm = vec![0.01_f32; 3 * SAMPLE_RATE];
+        let raised = pad_waves(&pieces, &pcm, 3.0, 1.0, Some(-20.0));
+        let plain = pad_waves(&pieces, &pcm, 3.0, 1.0, None);
+        assert_eq!(raised[0].len(), plain[0].len());
+        let head = (0.6 * SAMPLE_RATE as f64) as usize; // 1 s pad minus the 0.4 s of neighbour audio
+        assert_eq!(raised[0][..head], plain[0][..head]);
+        let mid = raised[0].len() / 2;
+        assert!((raised[0][mid] / plain[0][mid] - 7.94).abs() < 0.05);
+    }
+
+    #[test]
+    fn two_utterances_with_a_short_pause_are_split_at_ten_seconds() {
+        // 7 s, a 0.6 s pause, 7 s: one VAD-merged piece the recognizer would drop half of
+        let piece = SpeakerSpan {
+            start: 0.0,
+            end: 14.6,
+            speaker: 0,
+        };
+        let vad = [(0.0, 7.0), (7.6, 14.6)];
+        let pcm = vec![0.1; 15 * SAMPLE_RATE];
+        let pieces = split_long(vec![piece], &vad, &pcm, 10.0);
+        let edges: Vec<(f64, f64)> = pieces.iter().map(|p| (p.start, p.end)).collect();
+        assert_eq!(edges, [(0.0, 7.0), (7.6, 14.6)]);
     }
 
     #[test]
