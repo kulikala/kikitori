@@ -42,8 +42,10 @@ remove_receipt() {
       *) ;;
     esac
   done < "$RECEIPT"
-  rm -rf "$MODELS"
+  rm -rf "$MODELS" "$(dirname "$MODELS")/dict"
   rm -f "$RECEIPT"
+  # Only folders left empty; anything else in them stays
+  rmdir "$CONFIG" "$(dirname "$MODELS")" 2>/dev/null || true
 }
 if [ "${1:-}" = --uninstall ]; then remove_receipt; exit 0; fi
 

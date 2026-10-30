@@ -60,9 +60,16 @@ if ($Uninstall) {
         }
         Remove-Item -Force $Receipt
     }
-    if ($env:KIKITORI_KEEP_MODELS -ne '1') { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $HomeDir '.cache\kikitori\models') }
-    $ConfigDir = Join-Path $env:APPDATA 'kikitori'
-    if ((Test-Path $ConfigDir) -and -not (Get-ChildItem -Force $ConfigDir | Select-Object -First 1)) { Remove-Item -Force $ConfigDir }
+    # Mirror models_root() in crates/kikitori-core/src/paths.rs; the dictionary sits next to the models
+    $Models = if ($env:KIKITORI_MODELS) { $env:KIKITORI_MODELS } else { Join-Path (Join-Path $(if ($env:XDG_CACHE_HOME) { $env:XDG_CACHE_HOME } else { Join-Path $HomeDir '.cache' }) 'kikitori') 'models' }
+    if ($Models.Length -gt 3) { $Models = $Models.TrimEnd('\', '/') }   # keep a drive root such as D:\
+    $CacheDir = Split-Path $Models
+    $Dict = if ($CacheDir) { Join-Path $CacheDir 'dict' } else { 'dict' }
+    if ($env:KIKITORI_KEEP_MODELS -ne '1') { foreach ($d in $Models, $Dict) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $d } }
+    # Only folders left empty; anything else in them stays
+    foreach ($d in @((Join-Path $env:APPDATA 'kikitori'), $CacheDir) | Where-Object { $_ }) {
+        if ((Test-Path $d) -and -not (Get-ChildItem -Force $d | Select-Object -First 1)) { Remove-Item -Force $d }
+    }
     exit 0
 }
 $Arch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
