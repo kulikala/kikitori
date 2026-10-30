@@ -14,7 +14,7 @@ accelerate = ["dep:accelerate-src", "candle/accelerate", "candle-nn/accelerate",
 debug = []
 
 [dependencies]
-kikitori-core = { version = "0.6.1", path = "../kikitori-core" }
+kikitori-core = { version = "0.7.0-dev", path = "../kikitori-core" }
 anyhow = "1"
 candle = { package = "candle-core", version = "0.11", default-features = false }
 candle-nn = { version = "0.11", default-features = false }
