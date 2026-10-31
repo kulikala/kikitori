@@ -16,6 +16,15 @@ use std::sync::Mutex;
 
 const BATCH_SAMPLES: usize = 16_000 * 60;
 const CHUNK_SECONDS: f64 = 1500.0;
+/// 小さな話者を寄せるとき、長い話者 1 人あたり声の特徴を測る区間の数。
+const CENTROID_TURNS: usize = 30;
+/// 長い話者どうしをまとめる、声の特徴のコサイン類似度の下限。同じ会議の別の人は 0.5 未満、
+/// 1 人が分かれた話者どうしは 0.75 を超えた（AMI の会議 3 本）。
+const SAME_SPEAKER_SIMILARITY: f64 = 0.65;
+/// 話者の人数を自動で決めるとき、まとめたあとも話した時間がこの秒数に満たない話者を、声の近い話者に寄せる。
+const SMALL_SPEAKER_SECONDS: f64 = 30.0;
+/// 寄せる秒数の上限を、発話の合計に対する割合で決める。短い録音では本物の話者も数秒しか話さないため。
+const SMALL_SPEAKER_SHARE: f64 = 0.1;
 const SEGMENTATION: &str = "sherpa-onnx-pyannote-segmentation-3-0/model.onnx";
 const EMBEDDING: &str = "3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx";
 
@@ -381,38 +390,7 @@ impl Pyannote {
             .enumerate()
             .filter_map(|(index, turn)| ((turn.end - turn.start) >= 0.4).then_some(index))
             .collect();
-        // 区間を続きのままスレッドの数に分け、スレッドごとに抽出器を作って順に計算する。結果の順は変わらない
-        let (workers, threads) = match plan {
-            Some((workers, threads)) => (workers.max(1), threads.max(1)),
-            None => reembed_plan(self.budget(), self.instance_threads()),
-        };
-        let workers = workers.min(keep.len().max(1));
-        let chunk = keep.len().div_ceil(workers).max(1);
-        let turns_ref: &[SpeakerSpan] = turns;
-        let (model, threads) = (self.embedding.as_path(), threads);
-        let parts: Vec<Result<Vec<Vec<f64>>, String>> = std::thread::scope(|scope| {
-            let handles: Vec<_> = keep
-                .chunks(chunk)
-                .map(|indices| {
-                    scope.spawn(move || {
-                        let extractor = Self::extractor(model, threads)?;
-                        Self::embed(&extractor, pcm, turns_ref, indices)
-                    })
-                })
-                .collect();
-            handles
-                .into_iter()
-                .map(|handle| {
-                    handle
-                        .join()
-                        .unwrap_or_else(|_| Err("話者埋め込みの計算が止まりました。".to_owned()))
-                })
-                .collect()
-        });
-        let mut vectors = Vec::with_capacity(keep.len());
-        for part in parts {
-            vectors.extend(part?);
-        }
+        let vectors = self.embed_turns(pcm, turns, &keep, plan)?;
         let weights: Vec<f64> = keep
             .iter()
             .map(|&index| (turns[index].end - turns[index].start).min(15.0))
@@ -439,6 +417,100 @@ impl Pyannote {
             format!("話者 {found} 人（指定 {} 人）", self.num_speakers),
         );
         Ok(merge_turns(turns, 0.6))
+    }
+
+    /// 人数を自動で決めたときの話者を整える。実際の会議の録音では、1 人の声が多くの話者に
+    /// 分かれやすい。声の特徴がほぼ同じ話者をまとめ、それでも話した時間の合計が短い話者の区間は、
+    /// 声の特徴が最も近い、話した時間の長い話者へ移す。
+    fn regroup_speakers(
+        &mut self,
+        pcm: &[f32],
+        turns: &mut [SpeakerSpan],
+        plan: Option<(usize, usize)>,
+    ) -> Result<(), String> {
+        let found = turns
+            .iter()
+            .map(|turn| turn.speaker)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
+        if found < 2 {
+            return Ok(());
+        }
+        // 話者ごとに長い区間から声の特徴を測る。全区間を計算しないのは時間を抑えるため
+        let length = |turn: &SpeakerSpan| turn.end - turn.start;
+        let mut by_speaker = std::collections::BTreeMap::<usize, Vec<usize>>::new();
+        for (index, turn) in turns.iter().enumerate() {
+            if length(turn) >= 0.4 {
+                by_speaker.entry(turn.speaker).or_default().push(index);
+            }
+        }
+        let mut keep = Vec::new();
+        for own in by_speaker.values_mut() {
+            own.sort_by(|&left, &right| {
+                length(&turns[right])
+                    .total_cmp(&length(&turns[left]))
+                    .then(left.cmp(&right))
+            });
+            own.truncate(CENTROID_TURNS);
+            keep.extend(own.iter().copied());
+        }
+        keep.sort_unstable();
+        let vectors = self.embed_turns(pcm, turns, &keep, plan)?;
+        let (merged, small, min_total) = tidy_speakers(turns, &keep, &vectors);
+        let count = turns
+            .iter()
+            .map(|turn| turn.speaker)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
+        diagnostic(
+            false,
+            format!(
+                "話者 {found} 人のうち、声がほぼ同じ {merged} 人をまとめ、話した時間が {min_total:.1} 秒未満の {small} 人を声の近い話者に寄せて、{count} 人にしました。"
+            ),
+        );
+        Ok(())
+    }
+
+    /// `keep` の区間の話者埋め込みを、`keep` の順に返す。
+    fn embed_turns(
+        &self,
+        pcm: &[f32],
+        turns: &[SpeakerSpan],
+        keep: &[usize],
+        plan: Option<(usize, usize)>,
+    ) -> Result<Vec<Vec<f64>>, String> {
+        // 区間を続きのままスレッドの数に分け、スレッドごとに抽出器を作って順に計算する。結果の順は変わらない
+        let (workers, threads) = match plan {
+            Some((workers, threads)) => (workers.max(1), threads.max(1)),
+            None => reembed_plan(self.budget(), self.instance_threads()),
+        };
+        let workers = workers.min(keep.len().max(1));
+        let chunk = keep.len().div_ceil(workers).max(1);
+        let (model, threads) = (self.embedding.as_path(), threads);
+        let parts: Vec<Result<Vec<Vec<f64>>, String>> = std::thread::scope(|scope| {
+            let handles: Vec<_> = keep
+                .chunks(chunk)
+                .map(|indices| {
+                    scope.spawn(move || {
+                        let extractor = Self::extractor(model, threads)?;
+                        Self::embed(&extractor, pcm, turns, indices)
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| {
+                    handle
+                        .join()
+                        .unwrap_or_else(|_| Err("話者埋め込みの計算が止まりました。".to_owned()))
+                })
+                .collect()
+        });
+        let mut vectors = Vec::with_capacity(keep.len());
+        for part in parts {
+            vectors.extend(part?);
+        }
+        Ok(vectors)
     }
 
     fn diarize_single(&mut self, pcm: &[f32]) -> Result<Vec<SpeakerSpan>, String> {
@@ -491,7 +563,8 @@ impl Pyannote {
         });
         turns = merge_turns(&turns, 0.6);
         if self.num_speakers <= 0 {
-            return Ok(turns);
+            self.regroup_speakers(pcm, &mut turns, plan)?;
+            return Ok(merge_turns(&turns, 0.6));
         }
         let found = turns
             .iter()
@@ -1003,6 +1076,133 @@ fn plan_chunks(total: f64, speech: &[(f64, f64)], target: f64) -> Vec<(f64, f64)
     chunks
 }
 
+/// 声の特徴（`keep` の区間の `vectors`）から、ほぼ同じ声の話者をまとめ、話した時間の短い話者を
+/// 声の近い長い話者に寄せて、最初に話した人を 0 にする。(まとめた人数, 寄せた人数, 寄せる秒数) を返す。
+fn tidy_speakers(
+    turns: &mut [SpeakerSpan],
+    keep: &[usize],
+    vectors: &[Vec<f64>],
+) -> (usize, usize, f64) {
+    let length = |turn: &SpeakerSpan| turn.end - turn.start;
+    let found = turns
+        .iter()
+        .map(|turn| turn.speaker)
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    let mut centroids = std::collections::BTreeMap::<usize, Vec<f64>>::new();
+    for (&index, vector) in keep.iter().zip(vectors) {
+        let turn = &turns[index];
+        let weight = length(turn).min(15.0);
+        let centroid = centroids
+            .entry(turn.speaker)
+            .or_insert_with(|| vec![0.0; vector.len()]);
+        for (value, other) in centroid.iter_mut().zip(vector) {
+            *value += other * weight;
+        }
+    }
+
+    // 声の特徴がほぼ同じ話者をまとめる。まとめた話者は、番号の最も小さい話者の番号にする
+    let mut groups: Vec<(Vec<usize>, Vec<f64>)> = centroids
+        .into_iter()
+        .map(|(speaker, centroid)| (vec![speaker], centroid))
+        .collect();
+    loop {
+        let mut best = (f64::NEG_INFINITY, 0, 0);
+        for left in 0..groups.len() {
+            for right in left + 1..groups.len() {
+                let similarity = cosine(&groups[left].1, &groups[right].1);
+                if similarity > best.0 {
+                    best = (similarity, left, right);
+                }
+            }
+        }
+        if best.0 < SAME_SPEAKER_SIMILARITY {
+            break;
+        }
+        let (members, centroid) = groups.remove(best.2);
+        groups[best.1].0.extend(members);
+        for (value, other) in groups[best.1].1.iter_mut().zip(centroid) {
+            *value += other;
+        }
+    }
+    let mut head_of = std::collections::HashMap::new();
+    let mut centroids = std::collections::BTreeMap::new();
+    for (members, centroid) in groups {
+        let head = members.iter().copied().min().unwrap_or(0);
+        for speaker in members {
+            head_of.insert(speaker, head);
+        }
+        centroids.insert(head, centroid);
+    }
+    for turn in turns.iter_mut() {
+        if let Some(&head) = head_of.get(&turn.speaker) {
+            turn.speaker = head;
+        }
+    }
+
+    // まとめたあとも話した時間が短い話者は、声の最も近い長い話者に寄せる。
+    // 短い録音では本物の話者も数秒しか話さないので、全体に占める割合でも上限を設ける
+    let mut totals = std::collections::BTreeMap::<usize, f64>::new();
+    for turn in turns.iter() {
+        *totals.entry(turn.speaker).or_default() += length(turn);
+    }
+    let speech: f64 = totals.values().sum();
+    let min_total = SMALL_SPEAKER_SECONDS.min(SMALL_SPEAKER_SHARE * speech);
+    let large: std::collections::BTreeSet<usize> = totals
+        .iter()
+        .filter(|(speaker, &total)| total >= min_total && centroids.contains_key(speaker))
+        .map(|(&speaker, _)| speaker)
+        .collect();
+    let merged = found - totals.len();
+    let mut small = 0;
+    if !large.is_empty() {
+        small = totals.len() - large.len();
+        let mut moved = std::collections::HashMap::new();
+        for (&index, vector) in keep.iter().zip(vectors) {
+            if large.contains(&turns[index].speaker) {
+                continue;
+            }
+            let mut best: Option<(usize, f64)> = None;
+            for speaker in &large {
+                let similarity = cosine(vector, &centroids[speaker]);
+                if best.is_none_or(|(_, top)| similarity > top) {
+                    best = Some((*speaker, similarity));
+                }
+            }
+            if let Some((speaker, _)) = best {
+                moved.insert(index, speaker);
+            }
+        }
+        // 声の特徴を測れない短い区間は、時間順で直前（無ければ直後）の長い話者に付ける
+        let mut previous = None;
+        for (index, turn) in turns.iter_mut().enumerate() {
+            if let Some(&speaker) = moved.get(&index) {
+                turn.speaker = speaker;
+            }
+            if large.contains(&turn.speaker) {
+                previous = Some(turn.speaker);
+            } else if let Some(speaker) = previous {
+                turn.speaker = speaker;
+            }
+        }
+        let mut following = None;
+        for turn in turns.iter_mut().rev() {
+            if large.contains(&turn.speaker) {
+                following = Some(turn.speaker);
+            } else if let Some(speaker) = following {
+                turn.speaker = speaker;
+            }
+        }
+    }
+    // 最初に話した人を 0 にする
+    let mut rename = std::collections::HashMap::new();
+    for turn in turns.iter_mut() {
+        let next = rename.len();
+        turn.speaker = *rename.entry(turn.speaker).or_insert(next);
+    }
+    (merged, small, min_total)
+}
+
 /// チャンクをまたいで同じ話者を結び付ける。しきい値は sherpa-onnx と同じコサイン距離。
 fn link_speakers(
     centroids: &[Vec<f64>],
@@ -1295,6 +1495,117 @@ mod tests {
         let centroids = vec![vec![1.0, 0.0], vec![0.99, 0.01]];
         let labels = link_speakers(&centroids, &[0, 1], &[1.0, 1.0], 0.6, None);
         assert_eq!(labels[0], labels[1]);
+    }
+
+    fn spans(list: &[(f64, f64, usize)]) -> Vec<SpeakerSpan> {
+        list.iter()
+            .map(|&(start, end, speaker)| SpeakerSpan {
+                start,
+                end,
+                speaker,
+            })
+            .collect()
+    }
+
+    fn speakers(turns: &[SpeakerSpan]) -> Vec<usize> {
+        turns.iter().map(|turn| turn.speaker).collect()
+    }
+
+    #[test]
+    fn one_voice_split_into_long_speakers_is_merged() {
+        // 話者 1 と 3 は同じ声、話者 2 は別の声。どれも長く話している
+        let mut turns = spans(&[
+            (0.0, 100.0, 1),
+            (100.0, 200.0, 2),
+            (200.0, 300.0, 3),
+            (300.0, 400.0, 2),
+        ]);
+        let vectors = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.95, 0.1, 0.0],
+            vec![0.1, 1.0, 0.0],
+        ];
+        let (merged, small, _) = tidy_speakers(&mut turns, &[0, 1, 2, 3], &vectors);
+        assert_eq!((merged, small), (1, 0));
+        assert_eq!(speakers(&turns), vec![0, 1, 0, 1]);
+    }
+
+    #[test]
+    fn a_speaker_with_little_speech_joins_the_nearest_voice() {
+        // 話者 3 は 5 秒だけで、声は話者 2 に近い（同じ人とまとめるほどは近くない）
+        let mut turns = spans(&[(0.0, 200.0, 1), (200.0, 400.0, 2), (400.0, 405.0, 3)]);
+        let vectors = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.3, 0.6, 0.74],
+        ];
+        let (merged, small, min_total) = tidy_speakers(&mut turns, &[0, 1, 2], &vectors);
+        assert_eq!((merged, small, min_total), (0, 1, SMALL_SPEAKER_SECONDS));
+        assert_eq!(speakers(&turns), vec![0, 1, 1]);
+    }
+
+    #[test]
+    fn short_recordings_keep_speakers_who_speak_briefly() {
+        // 1 分の録音では、10 秒ずつ話す 3 人を寄せない
+        let mut turns = spans(&[(0.0, 10.0, 0), (10.0, 20.0, 1), (20.0, 30.0, 2)]);
+        let vectors = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+        ];
+        let (merged, small, _) = tidy_speakers(&mut turns, &[0, 1, 2], &vectors);
+        assert_eq!((merged, small), (0, 0));
+        assert_eq!(speakers(&turns), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn fragments_of_one_brief_speaker_are_merged_before_they_are_absorbed() {
+        // 話者 2 と 3 は同じ人で、20 秒ずつ。まとめると 40 秒になり、ほかの人に寄せない
+        let mut turns = spans(&[
+            (0.0, 300.0, 0),
+            (300.0, 600.0, 1),
+            (600.0, 620.0, 2),
+            (620.0, 640.0, 3),
+        ]);
+        let vectors = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.1, 1.0],
+            vec![0.1, 0.0, 1.0],
+        ];
+        let (merged, small, _) = tidy_speakers(&mut turns, &[0, 1, 2, 3], &vectors);
+        assert_eq!((merged, small), (1, 0));
+        assert_eq!(speakers(&turns), vec![0, 1, 2, 2]);
+    }
+
+    #[test]
+    fn distinct_voices_are_kept_when_no_one_speaks_long() {
+        // 短い録音で、別々の声の 12 人が同じくらい話したときは、寄せる先を決めずにそのまま残す
+        let list: Vec<_> = (0..12)
+            .map(|speaker| (speaker as f64 * 10.0, speaker as f64 * 10.0 + 10.0, speaker))
+            .collect();
+        let mut turns = spans(&list);
+        let vectors: Vec<Vec<f64>> = (0..12)
+            .map(|speaker| {
+                (0..12)
+                    .map(|axis| f64::from(u8::from(axis == speaker)))
+                    .collect()
+            })
+            .collect();
+        let keep: Vec<usize> = (0..12).collect();
+        let (merged, small, _) = tidy_speakers(&mut turns, &keep, &vectors);
+        assert_eq!((merged, small), (0, 0));
+        assert_eq!(speakers(&turns), (0..12).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn turns_without_a_voice_follow_the_previous_long_speaker() {
+        // 0.3 秒の区間は声の特徴を測らないので、直前の長い話者に付く
+        let mut turns = spans(&[(0.0, 200.0, 0), (200.0, 200.3, 5), (200.3, 400.0, 1)]);
+        let vectors = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
+        tidy_speakers(&mut turns, &[0, 2], &vectors);
+        assert_eq!(speakers(&turns), vec![0, 0, 1]);
     }
 
     #[test]
