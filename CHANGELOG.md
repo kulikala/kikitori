@@ -3,6 +3,8 @@
 この形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に、版の付け方は [Semantic Versioning](https://semver.org/lang/ja/) に従います。
 0.x の間は、利用者の手順や出力が変わる変更で minor を上げます。
 
+## [Unreleased]
+
 ## [0.8.0] - 2026-11-06
 
 ### Changed
