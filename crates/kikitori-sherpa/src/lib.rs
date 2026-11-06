@@ -513,7 +513,10 @@ impl Pyannote {
         Ok(vectors)
     }
 
-    fn diarize_single(&mut self, pcm: &[f32]) -> Result<Vec<SpeakerSpan>, String> {
+    fn diarize_single(
+        &mut self,
+        pcm: &[f32],
+    ) -> Result<(Vec<SpeakerSpan>, Vec<SpeakerSpan>), String> {
         self.diarize_single_threads(pcm, self.threads, None)
     }
 
@@ -523,7 +526,7 @@ impl Pyannote {
         pcm: &[f32],
         threads: usize,
         plan: Option<(usize, usize)>,
-    ) -> Result<Vec<SpeakerSpan>, String> {
+    ) -> Result<(Vec<SpeakerSpan>, Vec<SpeakerSpan>), String> {
         let diarizer = if threads == self.threads {
             None
         } else {
@@ -550,12 +553,14 @@ impl Pyannote {
         self.finish(pcm, turns, plan)
     }
 
+    /// 話者分離の区間を整え、(ASR の区間を切るための区間, 話者を付けるための区間) を返す。
+    /// 人数を自動で決めたときは、声をまとめる前の区間で認識の区間を切り、まとめた後の区間で話者を付ける。
     fn finish(
         &mut self,
         pcm: &[f32],
         mut turns: Vec<SpeakerSpan>,
         plan: Option<(usize, usize)>,
-    ) -> Result<Vec<SpeakerSpan>, String> {
+    ) -> Result<(Vec<SpeakerSpan>, Vec<SpeakerSpan>), String> {
         turns.sort_by(|left, right| {
             left.start
                 .total_cmp(&right.start)
@@ -563,8 +568,9 @@ impl Pyannote {
         });
         turns = merge_turns(&turns, 0.6);
         if self.num_speakers <= 0 {
+            let cuts = turns.clone();
             self.regroup_speakers(pcm, &mut turns, plan)?;
-            return Ok(merge_turns(&turns, 0.6));
+            return Ok((cuts, merge_turns(&turns, 0.6)));
         }
         let found = turns
             .iter()
@@ -581,9 +587,10 @@ impl Pyannote {
                     ),
                 );
             }
-            return Ok(turns);
+            return Ok((turns.clone(), turns));
         }
-        self.reembed(pcm, &mut turns, plan)
+        let labels = self.reembed(pcm, &mut turns, plan)?;
+        Ok((labels.clone(), labels))
     }
 
     /// チャンクに分けたときに話者分離へ使うスレッド数。分けないときは None。
@@ -618,7 +625,7 @@ impl Pyannote {
         workers: usize,
         target: f64,
         instance_threads: usize,
-    ) -> Result<Vec<SpeakerSpan>, String> {
+    ) -> Result<(Vec<SpeakerSpan>, Vec<SpeakerSpan>), String> {
         let total = pcm.len() as f64 / SAMPLE_RATE as f64;
         let speech = speech
             .iter()
@@ -914,10 +921,11 @@ impl Diarizer for Pyannote {
     fn diarize(&mut self, pcm: &[f32]) -> Result<Vec<SpeakerSpan>, String> {
         let total = pcm.len() as f64 / SAMPLE_RATE as f64;
         let Some((workers, target, instance)) = self.plan(total) else {
-            return self.diarize_single(pcm);
+            return self.diarize_single(pcm).map(|(_, labels)| labels);
         };
         let speech = Silero::new(&self.models, self.threads)?.spans(pcm)?;
         self.diarize_chunked(pcm, &speech, workers, target, instance)
+            .map(|(_, labels)| labels)
     }
 
     fn diarize_with_speech(
@@ -925,6 +933,15 @@ impl Diarizer for Pyannote {
         pcm: &[f32],
         speech: &[VadSpan],
     ) -> Result<Vec<SpeakerSpan>, String> {
+        self.diarize_with_speech_cuts(pcm, speech)
+            .map(|(_, labels)| labels)
+    }
+
+    fn diarize_with_speech_cuts(
+        &mut self,
+        pcm: &[f32],
+        speech: &[VadSpan],
+    ) -> Result<(Vec<SpeakerSpan>, Vec<SpeakerSpan>), String> {
         let total = pcm.len() as f64 / SAMPLE_RATE as f64;
         match self.plan(total) {
             Some((workers, target, instance)) => {

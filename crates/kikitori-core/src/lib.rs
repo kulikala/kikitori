@@ -137,6 +137,17 @@ pub trait Diarizer: Send {
         let _ = speech;
         self.diarize(pcm)
     }
+
+    /// Like `diarize_with_speech`, but returns the turns that decide where ASR pieces are cut
+    /// separately from the turns that decide their speaker labels. By default both are the same.
+    fn diarize_with_speech_cuts(
+        &mut self,
+        pcm: &[f32],
+        speech: &[VadSpan],
+    ) -> Result<(Vec<SpeakerSpan>, Vec<SpeakerSpan>), String> {
+        let turns = self.diarize_with_speech(pcm, speech)?;
+        Ok((turns.clone(), turns))
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

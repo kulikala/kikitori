@@ -287,18 +287,20 @@ pub fn run(
     let timestamps = asr.capabilities().timestamps;
 
     let started = std::time::Instant::now();
-    let turns = turn_list(diarizer.diarize_with_speech(pcm, &raw_vad)?);
+    let (cuts, labels) = diarizer.diarize_with_speech_cuts(pcm, &raw_vad)?;
+    let cuts = turn_list(cuts);
+    let labels = turn_list(labels);
     let diar_seconds = started.elapsed().as_secs_f64();
-    let additions = additions_for(&turns, &spans, options.fix_overlapping_turn_spans);
+    let additions = additions_for(&cuts, &spans, options.fix_overlapping_turn_spans);
     let mut all = spans.clone();
     all.extend(additions);
     all.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
-    let pieces = split_long(
-        plan(&all, &turns, options.min_piece),
-        &raw,
-        pcm,
-        max_seconds,
-    );
+    let mut pieces = split_long(plan(&all, &cuts, options.min_piece), &raw, pcm, max_seconds);
+    if labels != cuts {
+        for piece in &mut pieces {
+            piece.speaker = dominant(&labels, piece.start, piece.end);
+        }
+    }
     let started = std::time::Instant::now();
     let outputs = transcribe_pieces(asr, &pieces, pcm, total, options)?;
     let asr_seconds = started.elapsed().as_secs_f64();
@@ -306,7 +308,7 @@ pub fn run(
     let segments = build_segments(
         &pieces,
         outputs,
-        &turns,
+        &labels,
         pcm,
         timestamps,
         options,
@@ -554,6 +556,25 @@ mod tests {
     use super::*;
     use crate::testing::{DummyAsr, DummyDiarizer, DummyVad};
 
+    struct SplitDiarizer {
+        cuts: Vec<SpeakerSpan>,
+        labels: Vec<SpeakerSpan>,
+    }
+
+    impl Diarizer for SplitDiarizer {
+        fn diarize(&mut self, _pcm: &[f32]) -> Result<Vec<SpeakerSpan>, String> {
+            Ok(self.labels.clone())
+        }
+
+        fn diarize_with_speech_cuts(
+            &mut self,
+            _pcm: &[f32],
+            _speech: &[VadSpan],
+        ) -> Result<(Vec<SpeakerSpan>, Vec<SpeakerSpan>), String> {
+            Ok((self.cuts.clone(), self.labels.clone()))
+        }
+    }
+
     #[test]
     fn dummy_pipeline_assigns_speakers_across_turns() {
         let pcm = vec![0.01; SAMPLE_RATE * 4];
@@ -586,6 +607,87 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!((result[0].speaker, result[1].speaker), (0, 1));
         assert_eq!((result[0].start, result[0].end), (0.0, 2.0));
+    }
+
+    #[test]
+    fn pieces_are_cut_at_raw_turns_and_labelled_from_the_regrouped_turns() {
+        // 生の話者は 2 人だが、まとめたあとは同じ話者 1 人になる
+        let cuts = vec![
+            SpeakerSpan {
+                start: 0.0,
+                end: 2.0,
+                speaker: 0,
+            },
+            SpeakerSpan {
+                start: 2.0,
+                end: 4.0,
+                speaker: 1,
+            },
+        ];
+        let labels = vec![SpeakerSpan {
+            start: 0.0,
+            end: 4.0,
+            speaker: 7,
+        }];
+        let pcm = vec![0.01; SAMPLE_RATE * 4];
+        let mut asr = DummyAsr::new("hello");
+        let mut vad = DummyVad(vec![crate::VadSpan {
+            start: 0.0,
+            end: 4.0,
+        }]);
+        let mut diarizer = SplitDiarizer { cuts, labels };
+        let result = run(
+            &pcm,
+            &mut asr,
+            &mut vad,
+            &mut diarizer,
+            &PipelineOptions::default(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!((result[0].start, result[0].end), (0.0, 2.0));
+        assert_eq!((result[1].start, result[1].end), (2.0, 4.0));
+        assert_eq!((result[0].speaker, result[1].speaker), (7, 7));
+    }
+
+    #[test]
+    fn matching_cuts_and_labels_keep_the_old_behaviour() {
+        let turns = vec![
+            SpeakerSpan {
+                start: 0.0,
+                end: 2.0,
+                speaker: 0,
+            },
+            SpeakerSpan {
+                start: 2.0,
+                end: 4.0,
+                speaker: 1,
+            },
+        ];
+        let pcm = vec![0.01; SAMPLE_RATE * 4];
+        let run_with = |diarizer: &mut dyn Diarizer| {
+            let mut asr = DummyAsr::new("hello");
+            let mut vad = DummyVad(vec![crate::VadSpan {
+                start: 0.0,
+                end: 4.0,
+            }]);
+            run(
+                &pcm,
+                &mut asr,
+                &mut vad,
+                diarizer,
+                &PipelineOptions::default(),
+                None,
+            )
+            .unwrap()
+        };
+        let old = run_with(&mut DummyDiarizer(turns.clone()));
+        let split = run_with(&mut SplitDiarizer {
+            cuts: turns.clone(),
+            labels: turns,
+        });
+        assert_eq!(split, old);
     }
 
     #[test]
